@@ -1,0 +1,8 @@
+pywin32
+wmi
+requests
+python-dotenv
+streamlit
+pandas
+supabase
+plotly
