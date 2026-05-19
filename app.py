@@ -7,15 +7,17 @@ import plotly.express as px
 from supabase import create_client
 
 # --- LÓGICA DE CAMINHO ---
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+# Substitua o bloco de importação antigo por este:
 try:
-    from src.config import SUPABASE_URL, SUPABASE_KEY
-except ImportError:
+    # Tenta ler primeiro do Secrets (Ambiente de Produção na Nuvem)
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except KeyError:
+    # Caso não ache (Ambiente Local), tenta buscar do seu arquivo local que não vai para o GitHub
     try:
         from config import SUPABASE_URL, SUPABASE_KEY
     except ImportError:
-        st.error("Erro: Arquivo config.py não encontrado.")
+        st.error("Erro: Credenciais de banco de dados não configuradas.")
         st.stop()
 
 # --- CONFIGURAÇÕES DE PÁGINA ---
