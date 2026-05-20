@@ -144,7 +144,7 @@ if check_password():
         df = df_raw.loc[mask].copy()
 
         # --- DASHBOARD LAYOUT ---
-        st.markdown(f"<div class='main-title'>Analytics de Impressão Corporativa</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='main-title'>Analítico de Impressão Corporativa</div>", unsafe_allow_html=True)
 
         if not df.empty:
             # 1. MÉTRICAS PRINCIPAIS (Filtra apenas jobs com sucesso ou pendentes para não inflar consumo real)
@@ -211,7 +211,7 @@ if check_password():
                 
                 fig_status = px.pie(df_status, values='Quantidade', names='status', 
                                     hole=0.4, color='status', color_discrete_map=color_map)
-                fig_status.update_layout(margin=dict(t=30, b=0, l=0, r=0))
+                fig_status.update_layout(margin=dict(t=20, b=0, l=0, r=0))
                 st.plotly_chart(fig_status, use_container_width=True)
 
             st.divider()
