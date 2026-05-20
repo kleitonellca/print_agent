@@ -101,7 +101,7 @@ if check_password():
    # --- BARRA LATERAL COM IDENTIDADE VISUAL ---
     with st.sidebar:
         
-        URL_LOGO = "https://raw.githubusercontent.com/kleitonellca/print_agent/main/assets/logo_app_print.png"
+        URL_LOGO = "https://raw.githubusercontent.com/kleitonellca/print_agent/main/assets/logo_app_print.png?v=2"
         
         # Injeção centralizada com largura reduzida (65%) para dar mais sofisticação e respiro
         st.markdown(f"""
