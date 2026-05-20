@@ -31,7 +31,7 @@ st.set_page_config(
 st.markdown("""
     <style>
         [data-testid="stSidebar"] {
-            background-color: #f0f7fg; /* Azul Corporativo Claro */
+            background-color: #f0f7ff; /* Azul Corporativo Claro */
         }
         .main-title {
             color: #1E3A8A;
@@ -98,8 +98,19 @@ if check_password():
     df_raw = fetch_analytics()
 
     # --- SIDEBAR (FILTROS) ---
+    # --- BARRA LATERAL COM IDENTIDADE VISUAL ---
     with st.sidebar:
-        st.markdown("<h2 style='color: #1E3A8A;'>Ellca Print Monitor</h2>", unsafe_allow_html=True)
+        # Link direto para a imagem da sua logo (pode ser uma URL do seu site, Imgur, Supabase Storage, etc.)
+        URL_LOGO = "https://raw.githubusercontent.com/kleitonellca/print_agent/main/assets/logo_ellca.png"
+        
+        # Injeção da Logo com Design Responsivo e Margens Alinhadas
+        st.markdown(f"""
+            <div style="text-align: center; padding-bottom: 20px;">
+                <img src="{URL_LOGO}" style="max-width: 85%; height: auto; border-radius: 4px;">
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<p style='color: #64748B; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: -10px; text-align: center;'>Plataforma de Telemetria</p>", unsafe_allow_html=True)
         st.divider()
         
         # Auto Refresh
