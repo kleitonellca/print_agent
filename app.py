@@ -100,17 +100,15 @@ if check_password():
     # --- SIDEBAR (FILTROS) ---
     # --- BARRA LATERAL COM IDENTIDADE VISUAL ---
     with st.sidebar:
-        # Link direto para a imagem da sua logo (pode ser uma URL do seu site, Imgur, Supabase Storage, etc.)
-        URL_LOGO = "https://raw.githubusercontent.com/kleitonellca/print_agent/main/assets/logo_ellca.png" 
         
-        # Injeção da Logo com Design Responsivo e Margens Alinhadas
-        st.markdown(f"""
-            <div style="text-align: center; padding-bottom: 20px;">
-                <img src="{URL_LOGO}" style="max-width: 85%; height: auto; border-radius: 4px;">
-            </div>
-        """, unsafe_allow_html=True)
+        # OPÇÃO 1: Link Direto e Público (Exemplo com link bruto do GitHub)
+        # Certifique-se de usar o domínio "raw.githubusercontent.com" e não "github.com"
+        URL_LOGO = "https://raw.githubusercontent.com/kleitonellca/print_agent/main/assets/logo_app_print.png"
         
-        st.markdown("<p style='color: #64748B; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: -10px; text-align: center;'>Plataforma de Telemetria</p>", unsafe_allow_html=True)
+        # Método nativo do Streamlit (Controla o redimensionamento automaticamente)
+        st.sidebar.image(URL_LOGO, use_container_width=True)
+        
+        st.markdown("<p style='color: #64748B; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 5px; text-align: center;'>Plataforma de Telemetria</p>", unsafe_allow_html=True)
         st.divider()
         
         # Auto Refresh
