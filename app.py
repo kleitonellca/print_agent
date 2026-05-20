@@ -106,7 +106,7 @@ if check_password():
         # Injeção centralizada com largura reduzida (65%) para dar mais sofisticação e respiro
         st.markdown(f"""
             <div style="text-align: center; padding: 10px 0 20px 0;">
-                <img src="{URL_LOGO}" style="max-width: 65%; height: auto; border-radius: 12px;">
+                <img src="{URL_LOGO}" style="max-width: 50%; height: auto; border-radius: 12px;">
             </div>
         """, unsafe_allow_html=True)
         
