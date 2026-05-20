@@ -98,17 +98,19 @@ if check_password():
     df_raw = fetch_analytics()
 
     # --- SIDEBAR (FILTROS) ---
-    # --- BARRA LATERAL COM IDENTIDADE VISUAL ---
+   # --- BARRA LATERAL COM IDENTIDADE VISUAL ---
     with st.sidebar:
         
-        # OPÇÃO 1: Link Direto e Público (Exemplo com link bruto do GitHub)
-        # Certifique-se de usar o domínio "raw.githubusercontent.com" e não "github.com"
         URL_LOGO = "https://raw.githubusercontent.com/kleitonellca/print_agent/main/assets/logo_app_print.png"
         
-        # Método nativo do Streamlit (Controla o redimensionamento automaticamente)
-        st.sidebar.image(URL_LOGO, use_container_width=True)
+        # Injeção centralizada com largura reduzida (65%) para dar mais sofisticação e respiro
+        st.markdown(f"""
+            <div style="text-align: center; padding: 10px 0 20px 0;">
+                <img src="{URL_LOGO}" style="max-width: 65%; height: auto; border-radius: 12px;">
+            </div>
+        """, unsafe_allow_html=True)
         
-        st.markdown("<p style='color: #64748B; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 5px; text-align: center;'>Plataforma de Telemetria</p>", unsafe_allow_html=True)
+        # Linha fina de separação elegante
         st.divider()
         
         # Auto Refresh
