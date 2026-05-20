@@ -106,7 +106,7 @@ if check_password():
         # Injeção da Logo com Design Responsivo e Margens Alinhadas
         st.markdown(f"""
             <div style="text-align: center; padding-bottom: 20px;">
-                <img src="{URL_LOGO}" style="max-width: 85%; height: auto; border-radius: 4px;">
+                <img src="{URL_LOGO}" style="max-width: 50%; height: auto; border-radius: 4px;">
             </div>
         """, unsafe_allow_html=True)
         
