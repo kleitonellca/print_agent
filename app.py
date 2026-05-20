@@ -101,7 +101,7 @@ if check_password():
     # --- BARRA LATERAL COM IDENTIDADE VISUAL ---
     with st.sidebar:
         # Link direto para a imagem da sua logo (pode ser uma URL do seu site, Imgur, Supabase Storage, etc.)
-        URL_LOGO = "https://raw.githubusercontent.com/kleitonellca/print_agent/main/assets/logo_app_print.png"
+        URL_LOGO = "https://https://github.com/kleitonellca/print_agent/blob/main/logo_app_print.png"
         
         # Injeção da Logo com Design Responsivo e Margens Alinhadas
         st.markdown(f"""
