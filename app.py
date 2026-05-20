@@ -209,10 +209,30 @@ if check_password():
                     'Offline': '#7A7A7A'
                 }
                 
-                fig_status = px.pie(df_status, values='Quantidade', names='status', 
-                                    hole=0.3, color='status', color_discrete_map=color_map)
-                fig_status.update_layout(margin=dict(t=30, b=0, l=0, r=0))
-                st.plotly_chart(fig_status, use_container_width=True)
+                fig_status.update_layout(
+                    title={
+                        'text': "<b>Ciclo de Vida / Erros</b>",
+                        'y': 0.95,          # Move o título ligeiramente para baixo dentro do topo
+                        'x': 0.0,           # Mantém alinhado à esquerda
+                        'xanchor': 'left',
+                        'yanchor': 'top'
+                    },
+                    title_font=dict(size=14, color='#0F172A'),
+                    hoverlabel=dict(bgcolor="#FFFFFF", font_size=12, font_family="Inter", bordercolor="#E2E8F0"),
+                    
+                    # AJUSTE CRÍTICO DE MARGEM: Aumentando o topo (t) para 80 ou 90 força o Plotly 
+                    # a empurrar a rosca para baixo, abrindo espaço para o título não cortar.
+                    margin=dict(t=90, b=15, l=10, r=10), 
+                    
+                    legend=dict(
+                        orientation="h", 
+                        yanchor="bottom", 
+                        y=-0.25, 
+                        xanchor="center", 
+                        x=0.5, 
+                        font=dict(size=10, color="#64748B")
+                    )
+                )
 
             st.divider()
 
