@@ -31,7 +31,7 @@ st.set_page_config(
 st.markdown("""
     <style>
         [data-testid="stSidebar"] {
-            background-color: #f0f7ff; /* Azul Corporativo Claro */
+            background-color: #f0f7fg; /* Azul Corporativo Claro */
         }
         .main-title {
             color: #1E3A8A;
