@@ -210,8 +210,8 @@ if check_password():
                 }
                 
                 fig_status = px.pie(df_status, values='Quantidade', names='status', 
-                                    hole=0.4, color='status', color_discrete_map=color_map)
-                fig_status.update_layout(margin=dict(t=20, b=0, l=0, r=0))
+                                    hole=0.3, color='status', color_discrete_map=color_map)
+                fig_status.update_layout(margin=dict(t=30, b=0, l=0, r=0))
                 st.plotly_chart(fig_status, use_container_width=True)
 
             st.divider()
