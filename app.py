@@ -24,7 +24,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- ESTILIZAÇÃO CUSTOMIZADA ULTRA REFINADA (Eliminação Definitiva da Barra Branca) ---
+# --- ESTILIZAÇÃO CUSTOMIZADA EVOLUÍDA (Sem barra fantasma, Filtros em Destaque e Efeito Hover Neon) ---
 st.markdown("""
     <style>
         /* Ajustes de tela e reset de espaços no topo */
@@ -53,7 +53,7 @@ st.markdown("""
             margin-left: -3rem;
             margin-right: -3rem;
             margin-top: 0rem !important;
-            margin-bottom: 20px;
+            margin-bottom: 20px; /* Reduzido para aproximar os filtros legítimos */
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -79,67 +79,47 @@ st.markdown("""
             margin: 0;
         }
         
-        /* REMOÇÃO DA BARRA BRANCA INÚTIL: 
-           Identifica inputs de texto vazios/sem rótulo que são renderizados sozinhos antes dos filtros */
-        .corporate-header + div element-container:has(div[data-baseweb="input"]),
-        div[data-testid="stVerticalBlock"] > div:has(input[aria-label=""]):not(:has(label)) {
-            display: none !important;
-            height: 0px !important;
-            margin: 0px !important;
-            padding: 0px !important;
-        }
-        
-        /* Caso a barra branca seja um st.text_input residual sem label no topo da página */
-        div[data-testid="stVerticalBlock"] > div:first-child:has(div[data-baseweb="input"]) {
-            /* Se for o primeiro elemento logo após o HTML do header, nós ocultamos */
-            display: none !important;
-        }
-
-        /* Container de Filtros Legítimo */
+        /* Container de Filtros Legítimo - Sem elementos brancos vazios acima */
         .filter-section {
             background-color: #FFFFFF;
             padding: 18px 20px;
             border-radius: 8px;
-            border: 1.5px solid #002040; /* Destacando o bloco de filtros principal */
+            border: 1.5px solid #D1D5DB;
             margin-top: 0px !important;
             margin-bottom: 25px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
         }
 
-        /* Caixas Suspensas e Inputs Ativos */
+        /* Destacando os Inputs e Caixas Suspensas (Selectbox / Date Input do Streamlit) */
         div[data-baseweb="select"], div[data-baseweb="input"] {
-            border: 1.5px solid #002040 !important; /* Contorno forte em azul marinho */
+            border: 1px solid #002040 !important; /* Borda em azul marinho para destaque */
             border-radius: 6px !important;
             transition: all 0.2s ease-in-out !important;
-            background-color: #FFFFFF !important;
         }
         div[data-baseweb="select"]:focus-within, div[data-baseweb="input"]:focus-within {
             border-color: #0078D4 !important;
-            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.25) !important;
+            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.2) !important; /* Efeito focus premium */
         }
-        
-        /* Rótulos dos filtros */
         label p {
-            color: #002040 !important;
-            font-weight: 700 !important;
-            font-size: 14px !important;
+            color: #002040 !important; /* Rótulos (De, Até, Filial...) em azul escuro marcante */
+            font-weight: 600 !important;
         }
         
-        /* Animando os Cards de Métricas com Efeito Hover Neon */
+        /* Cards de Métricas com Efeito de Animação Neon no Hover */
         div[data-testid="stMetric"] {
             background-color: #FFFFFF !important;
             border: 1px solid #E5E7EB !important;
             padding: 20px 25px !important;
             border-radius: 8px !important;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04) !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important; /* Transição suave */
         }
         
         div[data-testid="stMetric"]:hover {
-            transform: translateY(-4px) !important;
-            border-color: #0078D4 !important;
-            box-shadow: 0 0 18px rgba(0, 120, 212, 0.5), 
-                        inset 0 0 8px rgba(0, 120, 212, 0.2) !important; /* Neon azul marcante */
+            transform: translateY(-4px) !important; /* Leve elevação tridimensional */
+            border-color: #0078D4 !important; /* Borda acende em azul */
+            box-shadow: 0 0 15px rgba(0, 120, 212, 0.45), 
+                        inset 0 0 6px rgba(0, 120, 212, 0.2) !important; /* Brilho Neon Azul Escuro */
         }
         
         div[data-testid="stMetric"] label {
