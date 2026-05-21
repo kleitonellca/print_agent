@@ -24,7 +24,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- ESTILIZAÇÃO CUSTOMIZADA EVOLUÍDA (Sem barra fantasma, Filtros em Destaque e Efeito Hover Neon) ---
+# --- ESTILIZAÇÃO CUSTOMIZADA EVOLUÍDA (Filtros Blindados e Efeito Hover Neon) ---
 st.markdown("""
     <style>
         /* Ajustes de tela e reset de espaços no topo */
@@ -53,7 +53,7 @@ st.markdown("""
             margin-left: -3rem;
             margin-right: -3rem;
             margin-top: 0rem !important;
-            margin-bottom: 20px; /* Reduzido para aproximar os filtros legítimos */
+            margin-bottom: 25px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -79,47 +79,51 @@ st.markdown("""
             margin: 0;
         }
         
-        /* Container de Filtros Legítimo - Sem elementos brancos vazios acima */
-        .filter-section {
-            background-color: #FFFFFF;
-            padding: 18px 20px;
-            border-radius: 8px;
-            border: 1.5px solid #D1D5DB;
-            margin-top: 0px !important;
-            margin-bottom: 25px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        /* Estilização do Container Nativo de Filtros (Garante que não fique vazio) */
+        div[data-testid="stElementContainer"]:has(.filter-box) {
+            margin-top: -5px !important;
         }
-
-        /* Destacando os Inputs e Caixas Suspensas (Selectbox / Date Input do Streamlit) */
-        div[data-baseweb="select"], div[data-baseweb="input"] {
-            border: 1px solid #002040 !important; /* Borda em azul marinho para destaque */
-            border-radius: 6px !important;
-            transition: all 0.2s ease-in-out !important;
-        }
-        div[data-baseweb="select"]:focus-within, div[data-baseweb="input"]:focus-within {
-            border-color: #0078D4 !important;
-            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.2) !important; /* Efeito focus premium */
-        }
-        label p {
-            color: #002040 !important; /* Rótulos (De, Até, Filial...) em azul escuro marcante */
-            font-weight: 600 !important;
+        .filter-box div[data-testid="stSubheader"] {
+            display: none !important;
         }
         
-        /* Cards de Métricas com Efeito de Animação Neon no Hover */
+        /* Input do Streamlit Customizado com Contorno Forte Azul Marinho */
+        div[data-baseweb="select"], div[data-baseweb="input"], div[data-baseweb="calendar"] {
+            border: 1.5px solid #002040 !important;
+            border-radius: 6px !important;
+            transition: all 0.2s ease-in-out !important;
+            background-color: #FFFFFF !important;
+        }
+        
+        /* Foco ativo com efeito Glow */
+        div[data-baseweb="select"]:focus-within, div[data-baseweb="input"]:focus-within {
+            border-color: #0078D4 !important;
+            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.25) !important;
+        }
+        
+        /* Forçar labels dos filtros em Azul Escuro Negrito */
+        label p {
+            color: #002040 !important;
+            font-weight: 700 !important;
+            font-size: 14px !important;
+        }
+        
+        /* Cards de Métricas com Animação e Brilho Neon no Hover */
         div[data-testid="stMetric"] {
             background-color: #FFFFFF !important;
             border: 1px solid #E5E7EB !important;
             padding: 20px 25px !important;
             border-radius: 8px !important;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04) !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important; /* Transição suave */
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
         
+        /* Efeito Hover Neon em Azul Escuro/Azul Principal */
         div[data-testid="stMetric"]:hover {
-            transform: translateY(-4px) !important; /* Leve elevação tridimensional */
-            border-color: #0078D4 !important; /* Borda acende em azul */
-            box-shadow: 0 0 15px rgba(0, 120, 212, 0.45), 
-                        inset 0 0 6px rgba(0, 120, 212, 0.2) !important; /* Brilho Neon Azul Escuro */
+            transform: translateY(-4px) !important;
+            border-color: #0078D4 !important;
+            box-shadow: 0 0 20px rgba(0, 32, 64, 0.2), 
+                        0 0 15px rgba(0, 120, 212, 0.45) !important;
         }
         
         div[data-testid="stMetric"] label {
@@ -140,7 +144,7 @@ st.markdown("""
             color: #002040;
             font-size: 15px;
             font-weight: 700;
-            margin-top: 15px;
+            margin-top: 20px;
             margin-bottom: 18px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -209,7 +213,7 @@ if check_password():
     df_raw = fetch_analytics()
 
     if not df_raw.empty:
-        # --- HEADER CORPORATIVO SUPERIOR CORRIGIDO ---
+        # --- HEADER CORPORATIVO SUPERIOR ---
         st.markdown("""
             <div class='corporate-header'>
                 <div class='header-title-box'>
@@ -223,25 +227,25 @@ if check_password():
             </div>
         """, unsafe_allow_html=True)
 
-        # --- FILTROS HORIZONTAIS SUPERIORES ---
-        st.markdown("<div class='filter-section'>", unsafe_allow_html=True)
-        f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
-        
-        with f_col1:
-            d_inicio = st.date_input("De", value=pd.to_datetime("today") - pd.Timedelta(days=7), format="DD/MM/YYYY")
-        with f_col2:
-            d_fim = st.date_input("Até", value=pd.to_datetime("today"), format="DD/MM/YYYY")
-        with f_col3:
-            filiais = ["Todas"] + sorted(df_raw['filial'].unique().tolist())
-            filial_sel = st.selectbox("Filial", filiais)
-        with f_col4:
-            users = ["Todos"] + sorted(df_raw['user_name'].unique().tolist())
-            user_sel = st.selectbox("Usuário", users)
-        with f_col5:
-            st.markdown("<label style='font-size:14px; font-weight:500; color:#4B5563;'>Configurações</label>", unsafe_allow_html=True)
-            auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)
+        # --- FILTROS HORIZONTAIS ENVELOPADOS (Solução do Bug da Barra) ---
+        with st.container(border=True):
+            # Injeta uma classe identificadora para o CSS focar apenas neste bloco
+            st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
+            f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
             
-        st.markdown("</div>", unsafe_allow_html=True)
+            with f_col1:
+                d_inicio = st.date_input("De", value=pd.to_datetime("today") - pd.Timedelta(days=7), format="DD/MM/YYYY")
+            with f_col2:
+                d_fim = st.date_input("Até", value=pd.to_datetime("today"), format="DD/MM/YYYY")
+            with f_col3:
+                filiais = ["Todas"] + sorted(df_raw['filial'].unique().tolist())
+                filial_sel = st.selectbox("Filial", filiais)
+            with f_col4:
+                users = ["Todos"] + sorted(df_raw['user_name'].unique().tolist())
+                user_sel = st.selectbox("Usuário", users)
+            with f_col5:
+                st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
+                auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)
 
         # --- FILTRAGEM DOS DADOS ---
         mask = (df_raw['Data'] >= d_inicio) & (df_raw['Data'] <= d_fim)
