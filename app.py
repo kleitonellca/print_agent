@@ -29,7 +29,7 @@ st.markdown("""
     <style>
         /* Força a aplicação a iniciar do topo absoluto, eliminando o corte da barra padrão */
         .stApp {
-            background-color: #F3F4F6 !important;
+            background-color: #F3F4F3 !important;
         }
         
         .block-container {
