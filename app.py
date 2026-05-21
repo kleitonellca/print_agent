@@ -13,12 +13,15 @@ CUSTO_POR_PAGINA = 0.15
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from src.config import SUPABASE_URL, SUPABASE_KEY
-except ImportError:
+    # Tenta ler primeiro do Secrets (Ambiente de Produção na Nuvem)
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except KeyError:
+    # Caso não ache (Ambiente Local), tenta buscar do seu arquivo local
     try:
         from config import SUPABASE_URL, SUPABASE_KEY
     except ImportError:
-        st.error("Erro: Arquivo config.py não encontrado.")
+        st.error("Erro: Credenciais de banco de dados não configuradas.")
         st.stop()
 
 # --- CONFIGURAÇÃO DA PÁGINA (ESTILO HIGH-CONTRAST SUTIL) ---
