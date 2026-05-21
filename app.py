@@ -225,7 +225,7 @@ if check_password():
                                          color_discrete_sequence=['#111827'], # Linha quase preta ultra moderna
                                          hover_data={'pages': True, 'Custo Formatado': True})
                     
-                    fig_timeline.update_traces(line_width=3, render_mode="svg")
+                    fig_timeline.update_traces(line_width=3)
                     fig_timeline.update_layout(
                         hovermode="x unified",
                         plot_bgcolor='rgba(0,0,0,0)',
