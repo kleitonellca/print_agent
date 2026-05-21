@@ -24,38 +24,47 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- ESTILIZAÇÃO CUSTOMIZADA (Estilo CredBusiness High-Fidelity) ---
+# --- ESTILIZAÇÃO CUSTOMIZADA EM AZUL MARINHO (Correção de Corte do Topo) ---
 st.markdown("""
     <style>
-        /* Fundo geral da aplicação */
+        /* Força a aplicação a iniciar do topo absoluto, eliminando o corte da barra padrão */
         .stApp {
             background-color: #F3F4F6 !important;
         }
         
-        /* Remove espaçamentos inúteis do topo padrão do Streamlit */
         .block-container {
             padding-top: 0rem !important;
             padding-bottom: 2rem !important;
             padding-left: 3rem !important;
             padding-right: 3rem !important;
+            margin-top: 0rem !important;
         }
         
-        /* Header Superior Fixo e Escuro */
+        /* Oculta o cabeçalho nativo transparente do Streamlit para evitar sobreposição */
+        header[data-testid="stHeader"] {
+            background-color: rgba(0,0,0,0) !important;
+            z-index: -1 !important;
+            display: none !important;
+        }
+        
+        /* Header Superior Ajustado - Cor Azul Marinho Corporativo */
         .corporate-header {
-            background-color: #031525;
-            padding: 15px 30px;
+            background-color: #002040; /* Azul Marinho Sólido */
+            padding: 18px 30px;
             margin-left: -3rem;
             margin-right: -3rem;
+            margin-top: 0rem !important;
             margin-bottom: 25px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 3px solid #0078D4;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
         .header-title-box {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
         }
         .header-main-title {
             color: #FFFFFF;
@@ -65,19 +74,19 @@ st.markdown("""
             margin: 0;
         }
         .header-subtitle {
-            color: #0078D4;
+            color: #38BDF8; /* Azul claro para contraste refinado no marinho */
             font-size: 24px;
             font-weight: 300;
             margin: 0;
         }
         
-        /* Cards de Métricas Estilizados */
+        /* Cards de Métricas Brancos Estilizados */
         div[data-testid="stMetric"] {
             background-color: #FFFFFF !important;
             border: 1px solid #E5E7EB !important;
             padding: 20px 25px !important;
             border-radius: 8px !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04) !important;
         }
         div[data-testid="stMetric"] label {
             color: #4B5563 !important;
@@ -87,12 +96,12 @@ st.markdown("""
             letter-spacing: 0.5px !important;
         }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-            color: #031525 !important;
+            color: #002040 !important; /* Texto interno em azul marinho */
             font-size: 28px !important;
             font-weight: 700 !important;
         }
         
-        /* Ajustes de Containers de Filtros e Divisores */
+        /* Container de Filtros Alinhado */
         .filter-section {
             background-color: #FFFFFF;
             padding: 15px 20px;
@@ -102,18 +111,13 @@ st.markdown("""
             box-shadow: 0 1px 3px rgba(0,0,0,0.02);
         }
         
-        /* Ocultar elementos desnecessários da barra lateral caso seja acionada por engano */
-        [data-testid="stSidebar"] {
-            background-color: #031525 !important;
-        }
-        
-        /* Customização de Títulos de Seções */
+        /* Títulos das Seções com Indicador Lateral Azul */
         .section-title {
-            color: #031525;
-            font-size: 16px;
+            color: #002040;
+            font-size: 15px;
             font-weight: 700;
-            margin-top: 10px;
-            margin-bottom: 15px;
+            margin-top: 15px;
+            margin-bottom: 18px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             border-left: 4px solid #0078D4;
@@ -181,21 +185,21 @@ if check_password():
     df_raw = fetch_analytics()
 
     if not df_raw.empty:
-        # --- HEADER CORPORATIVO SUPERIOR ---
+        # --- HEADER CORPORATIVO SUPERIOR CORRIGIDO ---
         st.markdown("""
             <div class='corporate-header'>
                 <div class='header-title-box'>
                     <span class='header-main-title'>Ellca Tecnologia</span>
                     <span class='header-subtitle'>| Monitor de Impressões</span>
                 </div>
-                <div style='color: #9CA3AF; font-size: 12px; text-align: right; font-family: sans-serif;'>
+                <div style='color: #9CA3AF; font-size: 12px; text-align: right; font-family: sans-serif; line-height: 1.4;'>
                     Admin: <b style='color: #FFFFFF;'>Kleiton Braga</b><br>
-                    Plataforma de Telemetria Ativa
+                    <span style='color: #38BDF8;'>Plataforma de Telemetria Ativa</span>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
-        # --- FILTROS HORIZONTAIS SUPERIORES (Estilo Segmentado) ---
+        # --- FILTROS HORIZONTAIS SUPERIORES ---
         st.markdown("<div class='filter-section'>", unsafe_allow_html=True)
         f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
         
@@ -225,7 +229,7 @@ if check_password():
         df = df_raw.loc[mask].copy()
 
         if not df.empty:
-            # --- SEÇÃO 1: MÉTRICAS MAIORES DE VOLUMETRIA ---
+            # --- SEÇÃO 1: METRICAS DE VOLUMETRIA ---
             jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
             t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
             t_jobs = len(df)
@@ -240,7 +244,7 @@ if check_password():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- SEÇÃO 2: CARD DE ALERTAS OPERACIONAIS ---
+            # --- SEÇÃO 2: ALERTA DO PARQUE ---
             st.markdown("<div class='section-title'>Alertas e Integridade do Parque</div>", unsafe_allow_html=True)
             col_t1, col_t2, col_t3 = st.columns(3)
             
@@ -257,7 +261,7 @@ if check_password():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- SEÇÃO 3: BLOCO PRINCIPAL DE GRÁFICOS INTERATIVOS ---
+            # --- SEÇÃO 3: BLOCO DE GRÁFICOS INTERATIVOS ---
             st.markdown("<div class='section-title'>Análise Gráfica Macroeconômica</div>", unsafe_allow_html=True)
             col_a, col_b = st.columns([2, 1])
 
@@ -273,20 +277,16 @@ if check_password():
                         hovertemplate="<b>📅 Data:</b> %{customdata[0]}<br><b>📄 Páginas:</b> %{y}<extra></extra>",
                         customdata=df_day[['Data_Formato']],
                         line=dict(width=3),
-                        fillcolor='rgba(0, 120, 212, 0.15)'
+                        fillcolor='rgba(0, 120, 212, 0.12)'
                     )
                     fig_timeline.update_layout(
                         hovermode="x unified",
                         plot_bgcolor='rgba(0,0,0,0)',
                         paper_bgcolor='rgba(0,0,0,0)',
-                        title_font=dict(size=14, color='#031525', family="Arial"),
+                        title_font=dict(size=14, color='#002040', family="Arial"),
                         xaxis=dict(showgrid=True, gridcolor='#E5E7EB', title=""),
                         yaxis=dict(showgrid=True, gridcolor='#E5E7EB', title=""),
                         margin=dict(t=50, b=20, l=20, r=20)
-                    )
-                    st.components.v1.html(
-                        f"<div style='background-color:#FFFFFF; padding:15px; border-radius:8px; border:1px solid #E5E7EB; shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>"
-                        f"</div>", height=0
                     )
                     st.plotly_chart(fig_timeline, use_container_width=True, config={'displayModeBar': False})
                 else:
@@ -315,7 +315,7 @@ if check_password():
                     
                     fig_status.update_layout(
                         title={"text": "<b>Ciclo de Vida / Erros</b>", "y": 0.95, "x": 0.0, "xanchor": 'left', "yanchor": 'top'},
-                        title_font=dict(size=14, color='#031525', family="Arial"),
+                        title_font=dict(size=14, color='#002040', family="Arial"),
                         plot_bgcolor='rgba(0,0,0,0)',
                         paper_bgcolor='rgba(0,0,0,0)',
                         margin=dict(t=80, b=40, l=10, r=10), 
@@ -332,7 +332,7 @@ if check_password():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- SEÇÃO 4: RANKINGS EM ESTILO CORPORATIVO ---
+            # --- SEÇÃO 4: RANKINGS ---
             col_r1, col_r2 = st.columns(2)
 
             with col_r1:
@@ -376,7 +376,7 @@ if check_password():
                     )
                     st.plotly_chart(fig_un, use_container_width=True, config={'displayModeBar': False})
 
-            # --- SEÇÃO 5: TABELA DE AUDITORIA CRISTALINA ---
+            # --- SEÇÃO 5: TABELA DE AUDITORIA ---
             st.markdown("<br><div class='section-title'>🔍 Auditoria de Documentos e Diagnósticos</div>", unsafe_allow_html=True)
             search = st.text_input("Filtrar registros por palavra-chave...")
             
@@ -407,7 +407,6 @@ if check_password():
                 hide_index=True
             )
 
-            # Exportação Limpa
             csv = df_final.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
             st.markdown("<br>", unsafe_allow_html=True)
             st.download_button("📥 Exportar Planilha Consolidada (Excel/CSV)", csv, "auditoria_impressao_ellca.csv", "text/csv")
@@ -417,7 +416,7 @@ if check_password():
     else:
         st.info("Aguardando sincronização de dados estruturados na nuvem...")
 
-    # LOGICA DE ATUALIZAÇÃO AUTOMÁTICA (MANTIDA EM 60 SEGUNDOS FLUIDO)
+    # LOGICA DE REFRESH AUTOMÁTICO
     if auto_refresh:
         time.sleep(60)
         st.rerun()
