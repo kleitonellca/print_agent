@@ -24,10 +24,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- ESTILIZAÇÃO CUSTOMIZADA EM AZUL MARINHO (Correção de Corte do Topo) ---
+# --- ESTILIZAÇÃO CUSTOMIZADA EVOLUÍDA (Sem barra fantasma, Filtros em Destaque e Efeito Hover Neon) ---
 st.markdown("""
     <style>
-        /* Força a aplicação a iniciar do topo absoluto, eliminando o corte da barra padrão */
+        /* Ajustes de tela e reset de espaços no topo */
         .stApp {
             background-color: #F3F4F6 !important;
         }
@@ -40,21 +40,20 @@ st.markdown("""
             margin-top: 0rem !important;
         }
         
-        /* Oculta o cabeçalho nativo transparente do Streamlit para evitar sobreposição */
         header[data-testid="stHeader"] {
             background-color: rgba(0,0,0,0) !important;
             z-index: -1 !important;
             display: none !important;
         }
         
-        /* Header Superior Ajustado - Cor Azul Marinho Corporativo */
+        /* Header Superior - Azul Marinho Corporativo */
         .corporate-header {
-            background-color: #00008b; /* Azul Marinho Sólido */
+            background-color: #002040;
             padding: 18px 30px;
             margin-left: -3rem;
             margin-right: -3rem;
             margin-top: 0rem !important;
-            margin-bottom: 25px;
+            margin-bottom: 20px; /* Reduzido para aproximar os filtros legítimos */
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -74,20 +73,55 @@ st.markdown("""
             margin: 0;
         }
         .header-subtitle {
-            color: #38BDF8; /* Azul claro para contraste refinado no marinho */
+            color: #38BDF8;
             font-size: 24px;
             font-weight: 300;
             margin: 0;
         }
         
-        /* Cards de Métricas Brancos Estilizados */
+        /* Container de Filtros Legítimo - Sem elementos brancos vazios acima */
+        .filter-section {
+            background-color: #FFFFFF;
+            padding: 18px 20px;
+            border-radius: 8px;
+            border: 1.5px solid #D1D5DB;
+            margin-top: 0px !important;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        }
+
+        /* Destacando os Inputs e Caixas Suspensas (Selectbox / Date Input do Streamlit) */
+        div[data-baseweb="select"], div[data-baseweb="input"] {
+            border: 1px solid #002040 !important; /* Borda em azul marinho para destaque */
+            border-radius: 6px !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+        div[data-baseweb="select"]:focus-within, div[data-baseweb="input"]:focus-within {
+            border-color: #0078D4 !important;
+            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.2) !important; /* Efeito focus premium */
+        }
+        label p {
+            color: #002040 !important; /* Rótulos (De, Até, Filial...) em azul escuro marcante */
+            font-weight: 600 !important;
+        }
+        
+        /* Cards de Métricas com Efeito de Animação Neon no Hover */
         div[data-testid="stMetric"] {
             background-color: #FFFFFF !important;
             border: 1px solid #E5E7EB !important;
             padding: 20px 25px !important;
             border-radius: 8px !important;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04) !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important; /* Transição suave */
         }
+        
+        div[data-testid="stMetric"]:hover {
+            transform: translateY(-4px) !important; /* Leve elevação tridimensional */
+            border-color: #0078D4 !important; /* Borda acende em azul */
+            box-shadow: 0 0 15px rgba(0, 120, 212, 0.45), 
+                        inset 0 0 6px rgba(0, 120, 212, 0.2) !important; /* Brilho Neon Azul Escuro */
+        }
+        
         div[data-testid="stMetric"] label {
             color: #4B5563 !important;
             font-size: 13px !important;
@@ -96,22 +130,12 @@ st.markdown("""
             letter-spacing: 0.5px !important;
         }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-            color: #002040 !important; /* Texto interno em azul marinho */
+            color: #002040 !important;
             font-size: 28px !important;
             font-weight: 700 !important;
         }
         
-        /* Container de Filtros Alinhado */
-        .filter-section {
-            background-color: #FFFFFF;
-            padding: 15px 20px;
-            border-radius: 8px;
-            border: 1px solid #E5E7EB;
-            margin-bottom: 25px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-        }
-        
-        /* Títulos das Seções com Indicador Lateral Azul */
+        /* Títulos das Seções */
         .section-title {
             color: #002040;
             font-size: 15px;
