@@ -49,7 +49,7 @@ st.markdown("""
         
         /* Header Superior Ajustado - Cor Azul Marinho Corporativo */
         .corporate-header {
-            background-color: #002040; /* Azul Marinho Sólido */
+            background-color: #00008b; /* Azul Marinho Sólido */
             padding: 18px 30px;
             margin-left: -3rem;
             margin-right: -3rem;
