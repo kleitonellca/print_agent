@@ -179,7 +179,7 @@ if check_password():
     CLEAN_URL = SUPABASE_URL.split("/rest/v1/")[0]
     supabase = create_client(CLEAN_URL, SUPABASE_KEY)
 
-    # --- BUSCA DE DADOS - LOGS HISTÓRICOS ---
+    # --- BUSCA DE DADOS ---
     @st.cache_data(ttl=30)
     def fetch_analytics():
         try:
@@ -207,21 +207,10 @@ if check_password():
                 df['status_pt'] = df['status'].map(mapa_status).fillna(df['status'])
             return df
         except Exception as e:
-            st.error(f"Erro ao buscar dados históricos: {e}")
-            return pd.DataFrame()
-
-    # --- BUSCA DE DADOS - TELEMETRIA DE INTEGRIDADE EM TEMPO REAL ---
-    @st.cache_data(ttl=15)
-    def fetch_printer_status():
-        try:
-            res = supabase.table("printer_status").select("*").execute()
-            return pd.DataFrame(res.data)
-        except Exception as e:
-            # Falha silenciosa para manter o dashboard rodando caso a tabela printer_status não esteja criada
+            st.error(f"Erro ao buscar dados: {e}")
             return pd.DataFrame()
 
     df_raw = fetch_analytics()
-    df_health_raw = fetch_printer_status()
 
     if not df_raw.empty:
         # --- HEADER CORPORATIVO SUPERIOR ---
@@ -240,6 +229,7 @@ if check_password():
 
         # --- FILTROS HORIZONTAIS ENVELOPADOS (Solução do Bug da Barra) ---
         with st.container(border=True):
+            # Injeta uma classe identificadora para o CSS focar apenas neste bloco
             st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
             f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
             
@@ -257,7 +247,7 @@ if check_password():
                 st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
                 auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)
 
-        # --- FILTRAGEM DOS DADOS HISTÓRICOS ---
+        # --- FILTRAGEM DOS DADOS ---
         mask = (df_raw['Data'] >= d_inicio) & (df_raw['Data'] <= d_fim)
         if filial_sel != "Todas":
             mask &= (df_raw['filial'] == filial_sel)
@@ -282,28 +272,13 @@ if check_password():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- SEÇÃO 2: ALERTA DO PARQUE (Mapeamento Dinâmico por Filial via Telemetria) ---
+            # --- SEÇÃO 2: ALERTA DO PARQUE ---
             st.markdown("<div class='section-title'>Alertas e Integridade do Parque</div>", unsafe_allow_html=True)
             col_t1, col_t2, col_t3 = st.columns(3)
             
-            # Inicializadores padrões de segurança
-            impressoras_offline = 0
-            toner_baixo = 0
-            filas_travadas = 0
-
-            # Lógica de processamento dos dados dinâmicos da printer_status
-            if not df_health_raw.empty:
-                if filial_sel != "Todas":
-                    df_health_filtered = df_health_raw[df_health_raw['filial'] == filial_sel]
-                else:
-                    df_health_filtered = df_health_raw
-
-                if not df_health_filtered.empty:
-                    # Consolida as impressoras de rede por valor máximo da filial eliminando duplicidades
-                    impressoras_offline = int(df_health_filtered['offline_printers'].max())
-                    toner_baixo = int(df_health_filtered['low_toner_alerts'].max())
-                    # Soma as filas travadas pois representam estações locais individuais
-                    filas_travadas = int(df_health_filtered['congested_queues'].sum())
+            impressoras_offline = df[df['status'] == 'Offline']['printer_name'].nunique()
+            toner_baixo = df[df['status'] == 'Toner baixo']['printer_name'].nunique()
+            filas_travadas = df[df['status'] == 'Fila congestionada']['printer_name'].nunique()
             
             col_t1.metric("Impressoras Offline", impressoras_offline, 
                         delta="Atenção" if impressoras_offline > 0 else "OK", delta_color="inverse")
@@ -469,7 +444,7 @@ if check_password():
     else:
         st.info("Aguardando sincronização de dados estruturados na nuvem...")
 
-    # LÓGICA DE REFRESH AUTOMÁTICO
+    # LOGICA DE REFRESH AUTOMÁTICO
     if auto_refresh:
         time.sleep(60)
         st.rerun()
