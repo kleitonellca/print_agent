@@ -9,14 +9,20 @@ from supabase import create_client
 # --- LÓGICA DE CAMINHO ---
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    from src.config import SUPABASE_URL, SUPABASE_KEY
-except ImportError:
+# 1. Tenta ler primeiro do ambiente de produção (Streamlit Cloud Secrets)
+if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+else:
+    # 2. Se não estiver na nuvem, busca no arquivo físico local da sua máquina
     try:
-        from config import SUPABASE_URL, SUPABASE_KEY
+        from src.config import SUPABASE_URL, SUPABASE_KEY
     except ImportError:
-        st.error("Erro: Arquivo config.py não encontrado.")
-        st.stop()
+        try:
+            from config import SUPABASE_URL, SUPABASE_KEY
+        except ImportError:
+            st.error("Erro: Nem as chaves locais (config.py) nem os Secrets de produção foram detectados.")
+            st.stop()
 
 # --- CONFIGURAÇÕES DE PÁGINA ---
 st.set_page_config(
