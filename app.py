@@ -179,26 +179,30 @@ if check_password():
     CLEAN_URL = SUPABASE_URL.split("/rest/v1/")[0]
     supabase = create_client(CLEAN_URL, SUPABASE_KEY)
 
-    # --- BUSCA DE DADOS CONSOLIDADA COM TRATAMENTO DE FUSO ---
+    # --- BUSCA DE DADOS CONSOLIDADA COM TRATAMENTO DE FUSO E CONTAGEM REAL ---
     @st.cache_data(ttl=15)
     def fetch_analytics():
         try:
-            # Sintaxe corrigida para API nativa do Supabase Python (desc=True)
-            res = supabase.table("print_logs").select("*").order("created_at", desc=True).execute()
+            # 1. Requisição HEAD leve para pegar a contagem EXATA e REAL de todas as linhas do banco
+            count_res = supabase.table("print_logs").select("*", count="exact").limit(1).execute()
+            total_real_logs = count_res.count if count_res.count is not None else 0
+
+            # 2. Busca dos registros (limitado aos 1000 mais recentes para performance da dashboard)
+            res = supabase.table("print_logs").select("*").order("created_at", desc=True).limit(1000).execute()
             df = pd.DataFrame(res.data)
             
             if not df.empty:
-                # 1. Força a interpretação inicial em UTC puro
+                # Força a interpretação inicial em UTC puro
                 df['created_at'] = pd.to_datetime(df['created_at'], utc=True)
                 
-                # 2. Transfere cirurgicamente para o fuso correto de Brasília antes de quebrar as colunas
+                # Transfere para o fuso correto de Brasília
                 df['created_at'] = df['created_at'].dt.tz_convert('America/Sao_Paulo')
                 
-                # 3. Extração segura para consistência do filtro de data por dia civil local
+                # Extração segura para consistência do filtro de data por dia civil local
                 df['Data'] = df['created_at'].dt.date
                 df['Hora'] = df['created_at'].dt.hour
                 
-                # 4. Remove a tag de fuso apenas para a exibição visual da tabela ficar limpa
+                # Remove a tag de fuso apenas para a exibição visual da tabela ficar limpa
                 df['created_at'] = df['created_at'].dt.tz_localize(None)
                 
                 if 'status' not in df.columns:
@@ -215,10 +219,15 @@ if check_password():
                     'Offline': 'Dispositivo Offline'
                 }
                 df['status_pt'] = df['status'].map(mapa_status).fillna(df['status'])
-            return df
+            
+            # Retornamos o DataFrame e a contagem real absoluta
+            return df, total_real_logs
         except Exception as e:
             st.error(f"Erro ao buscar dados: {e}")
-            return pd.DataFrame()
+            return pd.DataFrame(), 0
+
+    # Desempacota o dataframe e o contador real global
+    df_raw, total_global_logs = fetch_analytics()
 
     df_raw = fetch_analytics()
 
@@ -274,13 +283,20 @@ if check_password():
             # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA ---
             jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
             t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
-            t_jobs = len(df)
+            
+            # Se o filtro estiver exibindo tudo, usamos o total real do banco, senão usamos o count do filtro atual
+            filtro_limpo = (filial_sel == "Todas" and user_sel == "Todos" and d_inicio == data_minima_banco and d_fim == hoje_local)
+            exibir_total_logs = total_global_logs if filtro_limpo else len(df)
+            
             media_pag = round(jobs_validos['pages'].mean(), 1) if not jobs_validos.empty else 0
             t_unidades = df['filial'].nunique()
 
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Páginas (Sucesso)", f"{t_paginas:,}".replace(",", "."))
-            m2.metric("Total Logs Capturados", f"{t_jobs:,}".replace(",", "."))
+            
+            # CARD CORRIGIDO: Exibe o número real do banco sem travar em 1000
+            m2.metric("Total Logs Capturados", f"{exibir_total_logs:,}".replace(",", "."))
+            
             m3.metric("Média Págs / Doc", media_pag)
             m4.metric("Unidades Ativas", t_unidades)
 
