@@ -79,7 +79,7 @@ st.markdown("""
             margin: 0;
         }
         
-        /* Estilização do Container Nativo de Filtros (Garante que não fique vazio) */
+        /* Estilização do Container Nativo de Filtros */
         div[data-testid="stElementContainer"]:has(.filter-box) {
             margin-top: -5px !important;
         }
@@ -180,13 +180,19 @@ if check_password():
     supabase = create_client(CLEAN_URL, SUPABASE_KEY)
 
     # --- BUSCA DE DADOS ---
-    @st.cache_data(ttl=30)
+    @st.cache_data(ttl=15)  # Reduzido para 15s para dar mais agilidade no tempo real
     def fetch_analytics():
         try:
-            res = supabase.table("print_logs").select("*").execute()
+            # Ordenado pelo id/data decrescente para garantir consistência
+            res = supabase.table("print_logs").select("*").order("created_at", ascending=False).execute()
             df = pd.DataFrame(res.data)
             if not df.empty:
-                df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_convert('America/Sao_Paulo')
+                # Tratamento explícito de conversão e fuso horário paulista
+                df['created_at'] = pd.to_datetime(df['created_at'])
+                if df['created_at'].dt.tz is None:
+                    df['created_at'] = df['created_at'].dt.tz_localize('UTC')
+                
+                df['created_at'] = df['created_at'].dt.tz_convert('America/Sao_Paulo')
                 df['Data'] = df['created_at'].dt.date
                 df['Hora'] = df['created_at'].dt.hour
                 df['created_at'] = df['created_at'].dt.tz_localize(None)
@@ -227,21 +233,24 @@ if check_password():
             </div>
         """, unsafe_allow_html=True)
 
-        # --- FILTROS HORIZONTAIS ENVELOPADOS (Solução do Bug da Barra) ---
+        # --- FILTROS HORIZONTAIS ENVELOPADOS ---
+        # Definindo datas locais dinâmicas para evitar congelamento de fuso
+        hoje_local = pd.Timestamp.now(tz='America/Sao_Paulo').date()
+        set_dias_atras = hoje_local - pd.Timedelta(days=7)
+
         with st.container(border=True):
-            # Injeta uma classe identificadora para o CSS focar apenas neste bloco
             st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
             f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
             
             with f_col1:
-                d_inicio = st.date_input("De", value=pd.to_datetime("today") - pd.Timedelta(days=7), format="DD/MM/YYYY")
+                d_inicio = st.date_input("De", value=set_dias_atras, format="DD/MM/YYYY")
             with f_col2:
-                d_fim = st.date_input("Até", value=pd.to_datetime("today"), format="DD/MM/YYYY")
+                d_fim = st.date_input("Até", value=hoje_local, format="DD/MM/YYYY")
             with f_col3:
-                filiais = ["Todas"] + sorted(df_raw['filial'].unique().tolist())
+                filiais = ["Todas"] + sorted(df_raw['filial'].dropna().unique().tolist())
                 filial_sel = st.selectbox("Filial", filiais)
             with f_col4:
-                users = ["Todos"] + sorted(df_raw['user_name'].unique().tolist())
+                users = ["Todos"] + sorted(df_raw['user_name'].dropna().unique().tolist())
                 user_sel = st.selectbox("Usuário", users)
             with f_col5:
                 st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
