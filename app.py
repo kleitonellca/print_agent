@@ -229,8 +229,7 @@ if check_password():
     # Desempacota o dataframe e o contador real global
     df_raw, total_global_logs = fetch_analytics()
 
-    df_raw = fetch_analytics()
-
+    
     if not df_raw.empty:
         # --- HEADER CORPORATIVO SUPERIOR ---
         st.markdown("""
