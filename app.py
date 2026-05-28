@@ -453,7 +453,8 @@ if check_password():
     else:
         st.info("Aguardando sincronização de dados estruturados na nuvem...")
 
-    # LOGICA DE REFRESH AUTOMÁTICO
-    if auto_refresh:
+   # LOGICA DE REFRESH AUTOMÁTICO BLINDADA
+    # Verifica se a variável auto_refresh existe no escopo local antes de tentar ler
+    if 'auto_refresh' in locals() and auto_refresh:
         time.sleep(60)
         st.rerun()
