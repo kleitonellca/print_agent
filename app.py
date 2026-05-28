@@ -6,7 +6,7 @@ import time
 import plotly.express as px
 from supabase import create_client
 
-# --- LÓGICA DE CAMINHO ---
+# --- LÓGICA DE CAMINHO / CREDENCIAIS ---
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -179,26 +179,26 @@ if check_password():
     CLEAN_URL = SUPABASE_URL.split("/rest/v1/")[0]
     supabase = create_client(CLEAN_URL, SUPABASE_KEY)
 
-    # --- BUSCA DE DADOS ---
+    # --- BUSCA DE DADOS CONSOLIDADA COM TRATAMENTO DE FUSO ---
     @st.cache_data(ttl=15)
     def fetch_analytics():
         try:
-            # Busca ordenada trazendo o histórico completo
+            # Sintaxe corrigida para API nativa do Supabase Python (desc=True)
             res = supabase.table("print_logs").select("*").order("created_at", desc=True).execute()
             df = pd.DataFrame(res.data)
             
             if not df.empty:
-                # 1. Garante conversão para datetime sem perder informação de timezone
+                # 1. Força a interpretação inicial em UTC puro
                 df['created_at'] = pd.to_datetime(df['created_at'], utc=True)
                 
-                # 2. Converte para o fuso correto de Brasília ANTES de extrair a Data pura
+                # 2. Transfere cirurgicamente para o fuso correto de Brasília antes de quebrar as colunas
                 df['created_at'] = df['created_at'].dt.tz_convert('America/Sao_Paulo')
                 
-                # 3. Agora a extração da data e da hora está blindada e sincronizada com o fuso local
+                # 3. Extração segura para consistência do filtro de data por dia civil local
                 df['Data'] = df['created_at'].dt.date
                 df['Hora'] = df['created_at'].dt.hour
                 
-                # 4. Remove o timezone para exibição limpa na tabela de auditoria
+                # 4. Remove a tag de fuso apenas para a exibição visual da tabela ficar limpa
                 df['created_at'] = df['created_at'].dt.tz_localize(None)
                 
                 if 'status' not in df.columns:
@@ -223,35 +223,6 @@ if check_password():
     df_raw = fetch_analytics()
 
     if not df_raw.empty:
-        # --- FILTROS HORIZONTAIS ENVELOPADOS ---
-        hoje_local = pd.Timestamp.now(tz='America/Sao_Paulo').date()
-        
-        # CORREÇÃO HISTÓRICA: Se houver dados, o filtro inicial padrão passa a ser a data do primeiro registro (11/05/2026)
-        # Se preferir fixo em 11/05/2026, usamos: pd.to_datetime("2026-05-11").date()
-        data_minima_banco = df_raw['Data'].min() if 'Data' in df_raw.columns else hoje_local - pd.Timedelta(days=7)
-
-        with st.container(border=True):
-            st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
-            f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
-            
-            with f_col1:
-                # O filtro "De" agora inicia dinamicamente na data mais antiga do banco (trazendo o dia 11/05 automaticamente)
-                d_inicio = st.date_input("De", value=data_minima_banco, format="DD/MM/YYYY")
-            with f_col2:
-                d_fim = st.date_input("Até", value=hoje_local, format="DD/MM/YYYY")
-            with f_col3:
-                filiais = ["Todas"] + sorted(df_raw['filial'].dropna().unique().tolist())
-                filial_sel = st.selectbox("Filial", filiais)
-            with f_col4:
-                users = ["Todos"] + sorted(df_raw['user_name'].dropna().unique().tolist())
-                user_sel = st.selectbox("Usuário", users)
-            with f_col5:
-                st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
-                auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)
-            
-    df_raw = fetch_analytics()
-
-    if not df_raw.empty:
         # --- HEADER CORPORATIVO SUPERIOR ---
         st.markdown("""
             <div class='corporate-header'>
@@ -266,17 +237,18 @@ if check_password():
             </div>
         """, unsafe_allow_html=True)
 
-        # --- FILTROS HORIZONTAIS ENVELOPADOS ---
-        # Definindo datas locais dinâmicas para evitar congelamento de fuso
+        # --- FILTROS HORIZONTAIS ENVELOPADOS (Consistência do dia 11/05) ---
         hoje_local = pd.Timestamp.now(tz='America/Sao_Paulo').date()
-        set_dias_atras = hoje_local - pd.Timedelta(days=7)
+        
+        # Se houver dados no banco, o filtro "De" inicia automaticamente na data do registro mais antigo (11/05/2026)
+        data_minima_banco = df_raw['Data'].min() if 'Data' in df_raw.columns else hoje_local - pd.Timedelta(days=7)
 
         with st.container(border=True):
             st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
             f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
             
             with f_col1:
-                d_inicio = st.date_input("De", value=set_dias_atras, format="DD/MM/YYYY")
+                d_inicio = st.date_input("De", value=data_minima_banco, format="DD/MM/YYYY")
             with f_col2:
                 d_fim = st.date_input("Até", value=hoje_local, format="DD/MM/YYYY")
             with f_col3:
@@ -299,7 +271,7 @@ if check_password():
         df = df_raw.loc[mask].copy()
 
         if not df.empty:
-            # --- SEÇÃO 1: METRICAS DE VOLUMETRIA ---
+            # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA ---
             jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
             t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
             t_jobs = len(df)
@@ -486,8 +458,7 @@ if check_password():
     else:
         st.info("Aguardando sincronização de dados estruturados na nuvem...")
 
-   # LOGICA DE REFRESH AUTOMÁTICO BLINDADA
-    # Verifica se a variável auto_refresh existe no escopo local antes de tentar ler
+    # LÓGICA DE REFRESH AUTOMÁTICO BLINDADA CONTRA NAMEERROR
     if 'auto_refresh' in locals() and auto_refresh:
         time.sleep(60)
         st.rerun()
