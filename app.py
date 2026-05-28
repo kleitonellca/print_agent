@@ -183,8 +183,8 @@ if check_password():
     @st.cache_data(ttl=15)  # Reduzido para 15s para dar mais agilidade no tempo real
     def fetch_analytics():
         try:
-            # Ordenado pelo id/data decrescente para garantir consistência
-            res = supabase.table("print_logs").select("*").order("created_at", ascending=False).execute()
+            # CORREÇÃO: Usando desc=True em vez de ascending=False
+            res = supabase.table("print_logs").select("*").order("created_at", desc=True).execute()
             df = pd.DataFrame(res.data)
             if not df.empty:
                 # Tratamento explícito de conversão e fuso horário paulista
@@ -215,7 +215,7 @@ if check_password():
         except Exception as e:
             st.error(f"Erro ao buscar dados: {e}")
             return pd.DataFrame()
-
+            
     df_raw = fetch_analytics()
 
     if not df_raw.empty:
