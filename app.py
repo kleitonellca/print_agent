@@ -286,7 +286,7 @@ if check_password():
             jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
             t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
             
-            # Se o filtro estiver exibindo tudo, usamos o total real do banco, senão usamos o count do filtro atual
+            # Verificação segura de filtros limpos para exibição da volumetria real global
             filtro_limpo = (filial_sel == "Todas" and user_sel == "Todos" and d_inicio == data_minima_banco and d_fim == hoje_local)
             exibir_total_logs = total_global_logs if filtro_limpo else len(df)
             
@@ -295,10 +295,7 @@ if check_password():
 
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Páginas (Sucesso)", f"{t_paginas:,}".replace(",", "."))
-            
-            # CARD CORRIGIDO: Exibe o número real do banco sem travar em 1000
             m2.metric("Total Logs Capturados", f"{exibir_total_logs:,}".replace(",", "."))
-            
             m3.metric("Média Págs / Doc", media_pag)
             m4.metric("Unidades Ativas", t_unidades)
 
