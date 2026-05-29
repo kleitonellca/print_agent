@@ -179,41 +179,56 @@ if check_password():
     CLEAN_URL = SUPABASE_URL.split("/rest/v1/")[0]
     supabase = create_client(CLEAN_URL, SUPABASE_KEY)
 
-    # --- BUSCA DE DADOS OTIMIZADA (CORREÇÃO DE FILTROS E LIMITE DE 1000) ---
-    @st.cache_data(ttl=15)
-    def fetch_dashboard_metadata():
+   # --- 1. BUSCA DE METADADOS DOS DROPDOWNS (SEMPRE TRAZ TUDO) ---
+    @st.cache_data(ttl=30)
+    def fetch_filters_metadata():
         try:
-            # 1. Traz a contagem REAL absoluta do banco de dados
-            count_res = supabase.table("print_logs").select("*", count="exact").limit(1).execute()
-            total_real_logs = count_res.count if count_res.count is not None else 0
-
-            # 2. Traz a lista completa de todas as filiais do banco (sem limite de 1000)
+            # Lista todas as filiais distintas no banco
             filiais_res = supabase.table("print_logs").select("filial").execute()
-            df_filiais = pd.DataFrame(filiais_res.data)
-            lista_filiais = sorted(df_filiais['filial'].dropna().unique().tolist()) if not df_filiais.empty else []
+            df_f = pd.DataFrame(filiais_res.data)
+            lista_filiais = sorted(df_f['filial'].dropna().unique().tolist()) if not df_f.empty else []
 
-            # 3. Traz a lista completa de todos os usuários do banco (sem limite de 1000)
+            # Lista todos os usuários distintos no banco
             users_res = supabase.table("print_logs").select("user_name").execute()
-            df_users = pd.DataFrame(users_res.data)
-            lista_users = sorted(df_users['user_name'].dropna().unique().tolist()) if not df_users.empty else []
+            df_u = pd.DataFrame(users_res.data)
+            lista_users = sorted(df_u['user_name'].dropna().unique().tolist()) if not df_u.empty else []
 
-            # 4. Traz as primeiras e últimas datas reais para balizar o calendário do filtro
+            # Captura a data do primeiro log histórico do banco
             dates_res = supabase.table("print_logs").select("created_at").order("created_at", desc=False).limit(1).execute()
             if dates_res.data:
                 data_minima = pd.to_datetime(dates_res.data[0]['created_at']).tz_convert('America/Sao_Paulo').date()
             else:
                 data_minima = pd.Timestamp.now(tz='America/Sao_Paulo').date() - pd.Timedelta(days=7)
 
-            return total_real_logs, lista_filiais, lista_users, data_minima
+            return lista_filiais, lista_users, data_minima
         except Exception as e:
-            st.error(f"Erro ao buscar metadados do banco: {e}")
-            return 0, [], [], pd.Timestamp.now(tz='America/Sao_Paulo').date() - pd.Timedelta(days=7)
+            st.error(f"Erro ao carregar metadados dos filtros: {e}")
+            return [], [], pd.Timestamp.now(tz='America/Sao_Paulo').date() - pd.Timedelta(days=7)
 
-    @st.cache_data(ttl=15)
-    def fetch_recent_logs():
+    # --- 2. CONSULTA DINÂMICA FILTRADA DIRETO NO SUPABASE ---
+    def fetch_filtered_data(p_inicio, p_fim, f_sel, u_sel):
         try:
-            # Busca os 1000 registros mais recentes para a tabela e os gráficos dinâmicos
-            res = supabase.table("print_logs").select("*").order("created_at", desc=True).limit(1000).execute()
+            # Inicia a query base
+            query = supabase.table("print_logs").select("*", count="exact")
+            
+            # Converte as datas locais para o formato de string ISO esperado pelo banco timestampz
+            # Garante que pegamos desde o primeiro segundo do dia de início até o último segundo do dia de fim
+            iso_inicio = f"{p_inicio}T00:00:00.000000+00:00"
+            iso_fim = f"{p_fim}T23:59:59.999999+00:00"
+            
+            query = query.gte("created_at", iso_inicio).lte("created_at", iso_fim)
+            
+            # Aplica filtros condicionais direto na query do Supabase
+            if f_sel != "Todas":
+                query = query.eq("filial", f_sel)
+            if u_sel != "Todos":
+                query = query.eq("user_name", u_sel)
+                
+            # Ordena e limita o retorno de linhas (proteção de memória do Streamlit)
+            # Nota: O count="exact" lá em cima trará o número REAL de correspondências além das 1000 linhas
+            res = query.order("created_at", desc=True).limit(1000).execute()
+            
+            total_linhas_filtradas = res.count if res.count is not None else 0
             df = pd.DataFrame(res.data)
             
             if not df.empty:
@@ -237,76 +252,61 @@ if check_password():
                     'Offline': 'Dispositivo Offline'
                 }
                 df['status_pt'] = df['status'].map(mapa_status).fillna(df['status'])
-            return df
+                
+            return df, total_linhas_filtradas
         except Exception as e:
-            st.error(f"Erro ao buscar logs recentes: {e}")
-            return pd.DataFrame()
+            st.error(f"Erro na execução da consulta filtrada: {e}")
+            return pd.DataFrame(), 0
 
-    # Carrega os metadados globais e a amostragem de dados
-    total_global_logs, lista_todas_filiais, lista_todos_usuarios, data_minima_banco = fetch_dashboard_metadata()
-    df_raw = fetch_recent_logs()
+    # Carrega as opções dos dropdowns e a menor data histórica de forma global
+    lista_todas_filiais, lista_todos_usuarios, data_minima_banco = fetch_filters_metadata()
+    hoje_local = pd.Timestamp.now(tz='America/Sao_Paulo').date()
 
-    if not df_raw.empty:
-        # =====================================================================
-        # CONTROLE DE DATAS E CONFIGURAÇÃO DE ESCOPO GLOBAL
-        # =====================================================================
-        hoje_local = pd.Timestamp.now(tz='America/Sao_Paulo').date()
-
-        # --- HEADER CORPORATIVO SUPERIOR ---
-        st.markdown("""
-            <div class='corporate-header'>
-                <div class='header-title-box'>
-                    <span class='header-main-title'>Ellca Tecnologia</span>
-                    <span class='header-subtitle'>| Monitor de Impressões</span>
-                </div>
-                <div style='color: #9CA3AF; font-size: 12px; text-align: right; font-family: sans-serif; line-height: 1.4;'>
-                    Admin: <b style='color: #FFFFFF;'>Kleiton Braga</b><br>
-                    <span style='color: #38BDF8;'>Plataforma de Telemetria Ativa</span>
-                </div>
+    # --- HEADER CORPORATIVO SUPERIOR ---
+    st.markdown("""
+        <div class='corporate-header'>
+            <div class='header-title-box'>
+                <span class='header-main-title'>Ellca Tecnologia</span>
+                <span class='header-subtitle'>| Monitor de Impressões</span>
             </div>
-        """, unsafe_allow_html=True)
+            <div style='color: #9CA3AF; font-size: 12px; text-align: right; font-family: sans-serif; line-height: 1.4;'>
+                Admin: <b style='color: #FFFFFF;'>Kleiton Braga</b><br>
+                <span style='color: #38BDF8;'>Plataforma de Telemetria Ativa</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
-        # --- FILTROS HORIZONTAIS ENVELOPADOS (AGORA PUXANDO DO BANCO COMPLETO) ---
-        with st.container(border=True):
-            st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
-            f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
-            
-            with f_col1:
-                # O calendário agora inicia exatamente na menor data real do seu banco (ex: 11/05)
-                d_inicio = st.date_input("De", value=data_minima_banco, format="DD/MM/YYYY")
-            with f_col2:
-                d_fim = st.date_input("Até", value=hoje_local, format="DD/MM/YYYY")
-            with f_col3:
-                # Alimentado pela lista global, trazendo TODAS as filiais cadastradas no banco
-                filiais = ["Todas"] + lista_todas_filiais
-                filial_sel = st.selectbox("Filial", filiais)
-            with f_col4:
-                # Alimentado pela lista global, trazendo TODOS os usuários cadastrados no banco
-                users = ["Todos"] + lista_todos_usuarios
-                user_sel = st.selectbox("Usuário", users)
-            with f_col5:
-                st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
-                auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)        # --- FILTRAGEM DOS DADOS ---
-        mask = (df_raw['Data'] >= d_inicio) & (df_raw['Data'] <= d_fim)
-        if filial_sel != "Todas":
-            mask &= (df_raw['filial'] == filial_sel)
-        if user_sel != "Todos":
-            mask &= (df_raw['user_name'] == user_sel)
+    # --- FILTROS HORIZONTAIS ENVELOPADOS VIA INTERFACE ---
+    with st.container(border=True):
+        st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
+        f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
         
-        df = df_raw.loc[mask].copy()
+        with f_col1:
+            d_inicio = st.date_input("De", value=data_minima_banco, format="DD/MM/YYYY")
+        with f_col2:
+            d_fim = st.date_input("Até", value=hoje_local, format="DD/MM/YYYY")
+        with f_col3:
+            filiais = ["Todas"] + lista_todas_filiais
+            filial_sel = st.selectbox("Filial", filiais)
+        with f_col4:
+            users = ["Todos"] + lista_todos_usuarios
+            user_sel = st.selectbox("Usuário", users)
+        with f_col5:
+            st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
+            auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)
 
-        if not df.empty:
-            # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA ---
-            jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
-            t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
-            
-            # Verificação segura de filtros limpos para exibição da volumetria real global
-            filtro_limpo = (filial_sel == "Todas" and user_sel == "Todos" and d_inicio == data_minima_banco and d_fim == hoje_local)
-            exibir_total_logs = total_global_logs if filtro_limpo else len(df)
-            
-            media_pag = round(jobs_validos['pages'].mean(), 1) if not jobs_validos.empty else 0
-            t_unidades = df['filial'].nunique()
+    # --- EXECUÇÃO DA FILTRAGEM EM NÍVEL DE BANCO DE DADOS ---
+    # Sempre que o usuário interagir com os filtros acima, o Streamlit roda esta função 
+    # enviando os parâmetros direto na query HTTP para o Supabase.
+    df, exibir_total_logs = fetch_filtered_data(d_inicio, d_fim, filial_sel, user_sel)
 
+    if not df.empty:
+        # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA ---
+        jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
+        t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
+        media_pag = round(jobs_validos['pages'].mean(), 1) if not jobs_validos.empty else 0
+        t_unidades = df['filial'].nunique()
+        
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Páginas (Sucesso)", f"{t_paginas:,}".replace(",", "."))
             m2.metric("Total Logs Capturados", f"{exibir_total_logs:,}".replace(",", "."))
