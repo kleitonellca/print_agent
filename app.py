@@ -179,30 +179,48 @@ if check_password():
     CLEAN_URL = SUPABASE_URL.split("/rest/v1/")[0]
     supabase = create_client(CLEAN_URL, SUPABASE_KEY)
 
-    # --- BUSCA DE DADOS CONSOLIDADA COM TRATAMENTO DE FUSO E CONTAGEM REAL ---
+    # --- BUSCA DE DADOS OTIMIZADA (CORREÇÃO DE FILTROS E LIMITE DE 1000) ---
     @st.cache_data(ttl=15)
-    def fetch_analytics():
+    def fetch_dashboard_metadata():
         try:
-            # 1. Requisição HEAD leve para pegar a contagem EXATA e REAL de todas as linhas do banco
+            # 1. Traz a contagem REAL absoluta do banco de dados
             count_res = supabase.table("print_logs").select("*", count="exact").limit(1).execute()
             total_real_logs = count_res.count if count_res.count is not None else 0
 
-            # 2. Busca dos registros (limitado aos 1000 mais recentes para performance da dashboard)
+            # 2. Traz a lista completa de todas as filiais do banco (sem limite de 1000)
+            filiais_res = supabase.table("print_logs").select("filial").execute()
+            df_filiais = pd.DataFrame(filiais_res.data)
+            lista_filiais = sorted(df_filiais['filial'].dropna().unique().tolist()) if not df_filiais.empty else []
+
+            # 3. Traz a lista completa de todos os usuários do banco (sem limite de 1000)
+            users_res = supabase.table("print_logs").select("user_name").execute()
+            df_users = pd.DataFrame(users_res.data)
+            lista_users = sorted(df_users['user_name'].dropna().unique().tolist()) if not df_users.empty else []
+
+            # 4. Traz as primeiras e últimas datas reais para balizar o calendário do filtro
+            dates_res = supabase.table("print_logs").select("created_at").order("created_at", desc=False).limit(1).execute()
+            if dates_res.data:
+                data_minima = pd.to_datetime(dates_res.data[0]['created_at']).tz_convert('America/Sao_Paulo').date()
+            else:
+                data_minima = pd.Timestamp.now(tz='America/Sao_Paulo').date() - pd.Timedelta(days=7)
+
+            return total_real_logs, lista_filiais, lista_users, data_minima
+        except Exception as e:
+            st.error(f"Erro ao buscar metadados do banco: {e}")
+            return 0, [], [], pd.Timestamp.now(tz='America/Sao_Paulo').date() - pd.Timedelta(days=7)
+
+    @st.cache_data(ttl=15)
+    def fetch_recent_logs():
+        try:
+            # Busca os 1000 registros mais recentes para a tabela e os gráficos dinâmicos
             res = supabase.table("print_logs").select("*").order("created_at", desc=True).limit(1000).execute()
             df = pd.DataFrame(res.data)
             
             if not df.empty:
-                # Força a interpretação inicial em UTC puro
                 df['created_at'] = pd.to_datetime(df['created_at'], utc=True)
-                
-                # Transfere para o fuso correto de Brasília
                 df['created_at'] = df['created_at'].dt.tz_convert('America/Sao_Paulo')
-                
-                # Extração segura para consistência do filtro de data por dia civil local
                 df['Data'] = df['created_at'].dt.date
                 df['Hora'] = df['created_at'].dt.hour
-                
-                # Remove a tag de fuso apenas para a exibição visual da tabela ficar limpa
                 df['created_at'] = df['created_at'].dt.tz_localize(None)
                 
                 if 'status' not in df.columns:
@@ -219,25 +237,20 @@ if check_password():
                     'Offline': 'Dispositivo Offline'
                 }
                 df['status_pt'] = df['status'].map(mapa_status).fillna(df['status'])
-            
-            return df, total_real_logs
+            return df
         except Exception as e:
-            st.error(f"Erro ao buscar dados: {e}")
-            return pd.DataFrame(), 0
+            st.error(f"Erro ao buscar logs recentes: {e}")
+            return pd.DataFrame()
 
-    # Desempacota o dataframe e o contador real global
-    df_raw, total_global_logs = fetch_analytics()
+    # Carrega os metadados globais e a amostragem de dados
+    total_global_logs, lista_todas_filiais, lista_todos_usuarios, data_minima_banco = fetch_dashboard_metadata()
+    df_raw = fetch_recent_logs()
 
     if not df_raw.empty:
         # =====================================================================
-        # CONTROLE DE DATAS E CONFIGURAÇÃO DE ESCOPO GLOBAL (BLINDAGEM DE ESCOPO)
+        # CONTROLE DE DATAS E CONFIGURAÇÃO DE ESCOPO GLOBAL
         # =====================================================================
         hoje_local = pd.Timestamp.now(tz='America/Sao_Paulo').date()
-        
-        if 'Data' in df_raw.columns:
-            data_minima_banco = df_raw['Data'].min()
-        else:
-            data_minima_banco = hoje_local - pd.Timedelta(days=7)
 
         # --- HEADER CORPORATIVO SUPERIOR ---
         st.markdown("""
@@ -253,26 +266,27 @@ if check_password():
             </div>
         """, unsafe_allow_html=True)
 
-        # --- FILTROS HORIZONTAIS ENVELOPADOS ---
+        # --- FILTROS HORIZONTAIS ENVELOPADOS (AGORA PUXANDO DO BANCO COMPLETO) ---
         with st.container(border=True):
             st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
             f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
             
             with f_col1:
+                # O calendário agora inicia exatamente na menor data real do seu banco (ex: 11/05)
                 d_inicio = st.date_input("De", value=data_minima_banco, format="DD/MM/YYYY")
             with f_col2:
                 d_fim = st.date_input("Até", value=hoje_local, format="DD/MM/YYYY")
             with f_col3:
-                filiais = ["Todas"] + sorted(df_raw['filial'].dropna().unique().tolist())
+                # Alimentado pela lista global, trazendo TODAS as filiais cadastradas no banco
+                filiais = ["Todas"] + lista_todas_filiais
                 filial_sel = st.selectbox("Filial", filiais)
             with f_col4:
-                users = ["Todos"] + sorted(df_raw['user_name'].dropna().unique().tolist())
+                # Alimentado pela lista global, trazendo TODOS os usuários cadastrados no banco
+                users = ["Todos"] + lista_todos_usuarios
                 user_sel = st.selectbox("Usuário", users)
             with f_col5:
                 st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
-                auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)
-
-        # --- FILTRAGEM DOS DADOS ---
+                auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)        # --- FILTRAGEM DOS DADOS ---
         mask = (df_raw['Data'] >= d_inicio) & (df_raw['Data'] <= d_fim)
         if filial_sel != "Todas":
             mask &= (df_raw['filial'] == filial_sel)
