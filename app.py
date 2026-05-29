@@ -263,3 +263,225 @@ if check_password():
     # --- HEADER CORPORATIVO SUPERIOR ---
     st.markdown("""
         <div class='corporate-header'>
+            <div class='header-title-box'>
+                <span class='header-main-title'>Ellca Tecnologia</span>
+                <span class='header-subtitle'>| Monitor de Impressões</span>
+            </div>
+            <div style='color: #9CA3AF; font-size: 12px; text-align: right; font-family: sans-serif; line-height: 1.4;'>
+                Admin: <b style='color: #FFFFFF;'>Kleiton Braga</b><br>
+                <span style='color: #38BDF8;'>Plataforma de Telemetria Ativa</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # --- FILTROS HORIZONTAIS ENVELOPADOS VIA INTERFACE ---
+    with st.container(border=True):
+        st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
+        f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
+        
+        with f_col1:
+            d_inicio = st.date_input("De", value=data_minima_banco, format="DD/MM/YYYY")
+        with f_col2:
+            d_fim = st.date_input("Até", value=hoje_local, format="DD/MM/YYYY")
+        with f_col3:
+            filiais = ["Todas"] + lista_todas_filiais
+            filial_sel = st.selectbox("Filial", filiais)
+        with f_col4:
+            users = ["Todos"] + lista_todos_usuarios
+            user_sel = st.selectbox("Usuário", users)
+        with f_col5:
+            st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
+            auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)
+
+    # --- EXECUÇÃO DA FILTRAGEM ---
+    df, exibir_total_logs = fetch_filtered_data(d_inicio, d_fim, filial_sel, user_sel)
+
+    if not df.empty:
+        # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA ---
+        jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
+        t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
+        media_pag = round(jobs_validos['pages'].mean(), 1) if not jobs_validos.empty else 0
+        t_unidades = df['filial'].nunique()
+        
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Páginas (Sucesso)", f"{t_paginas:,}".replace(",", "."))
+        m2.metric("Total Logs Capturados", f"{exibir_total_logs:,}".replace(",", "."))
+        m3.metric("Média Págs / Doc", media_pag)
+        m4.metric("Unidades Ativas", t_unidades)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- SEÇÃO 2: ALERTA DO PARQUE ---
+        st.markdown("<div class='section-title'>Alertas e Integridade do Parque</div>", unsafe_allow_html=True)
+        col_t1, col_t2, col_t3 = st.columns(3)
+        
+        impressoras_offline = df[df['status'] == 'Offline']['printer_name'].nunique() if 'status' in df.columns else 0
+        toner_baixo = df[df['status'] == 'Toner baixo']['printer_name'].nunique() if 'status' in df.columns else 0
+        filas_travadas = df[df['status'] == 'Fila congestionada']['printer_name'].nunique() if 'status' in df.columns else 0
+        
+        col_t1.metric("Impressoras Offline", impressoras_offline, 
+                    delta="Atenção" if impressoras_offline > 0 else "OK", delta_color="inverse")
+        col_t2.metric("Alertas de Toner Baixo", toner_baixo, 
+                    delta="Substituir" if toner_baixo > 0 else "OK", delta_color="inverse")
+        col_t3.metric("Filas Congestionadas", filas_travadas, 
+                    delta="Spooler Retido" if filas_travadas > 0 else "OK", delta_color="inverse")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- SEÇÃO 3: BLOCO DE GRÁFICOS INTERATIVOS ---
+        st.markdown("<div class='section-title'>Análise Gráfica Macroeconômica</div>", unsafe_allow_html=True)
+        col_a, col_b = st.columns([2, 1])
+
+        with col_a:
+            df_day = jobs_validos.groupby('Data')['pages'].sum().reset_index() if not jobs_validos.empty else pd.DataFrame(columns=['Data', 'pages'])
+            if not df_day.empty:
+                df_day['Data_Formato'] = df_day['Data'].apply(lambda x: x.strftime('%d/%m/%Y'))
+                fig_timeline = px.area(df_day, x='Data', y='pages', 
+                                       title="<b>Histórico de Consumo Efetivo (Páginas)</b>",
+                                       color_discrete_sequence=['#0078D4'])
+                
+                fig_timeline.update_traces(
+                    hovertemplate="<b>📅 Data:</b> %{customdata[0]}<br><b>📄 Páginas:</b> %{y}<extra></extra>",
+                    customdata=df_day[['Data_Formato']],
+                    line=dict(width=3),
+                    fillcolor='rgba(0, 120, 212, 0.12)'
+                )
+                fig_timeline.update_layout(
+                    hovermode="x unified",
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    title_font=dict(size=14, color='#002040', family="Arial"),
+                    xaxis=dict(showgrid=True, gridcolor='#E5E7EB', title=""),
+                    yaxis=dict(showgrid=True, gridcolor='#E5E7EB', title=""),
+                    margin=dict(t=50, b=20, l=20, r=20)
+                )
+                st.plotly_chart(fig_timeline, use_container_width=True, config={'displayModeBar': False})
+            else:
+                st.info("Sem dados volumétricos suficientes para gerar a linha temporal.")
+
+        with col_b:
+            df_status = df.groupby('status_pt').size().reset_index(name='Quantidade') if 'status_pt' in df.columns else pd.DataFrame()
+            if not df_status.empty:
+                color_map = {
+                    'Impressão Concluída': '#0078D4',
+                    'Retido na Fila': '#FFB900',
+                    'Cancelado pelo Usuário': '#D83B01',
+                    'Falha Crítica': '#E81123',
+                    'Spooler Sobrecarregado': '#A741A5',
+                    'Toner Baixo': '#F7630C',
+                    'Dispositivo Offline': '#7A7A7A'
+                }
+                
+                fig_status = px.pie(df_status, values='Quantidade', names='status_pt', hole=0.60,
+                                    color='status_pt', color_discrete_map=color_map)
+                
+                fig_status.update_traces(
+                    textinfo='none',
+                    hovertemplate="<b>📌 Status:</b> %{label}<br><b>📋 Ocorrências:</b> %{value}<br><b>📊 Porcentagem:</b> %{percent}<extra></extra>"
+                )
+                
+                fig_status.update_layout(
+                    title={"text": "<b>Ciclo de Vida / Erros</b>", "y": 0.95, "x": 0.0, "xanchor": 'left', "yanchor": 'top'},
+                    title_font=dict(size=14, color='#002040', family="Arial"),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    margin=dict(t=80, b=40, l=10, r=10), 
+                    legend=dict(
+                        orientation="h", 
+                        yanchor="bottom", 
+                        y=-0.25, 
+                        xanchor="center", 
+                        x=0.5, 
+                        font=dict(size=10, color="#4B5563")
+                    )
+                )
+                st.plotly_chart(fig_status, use_container_width=True, config={'displayModeBar': False})
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- SEÇÃO 4: RANKINGS ---
+        col_r1, col_r2 = st.columns(2)
+
+        with col_r1:
+            st.markdown("<div class='section-title'>👤 Top 5 Usuários (Consumo Efetivo)</div>", unsafe_allow_html=True)
+            top_u = jobs_validos.groupby('user_name')['pages'].sum().nlargest(5).reset_index() if not jobs_validos.empty else pd.DataFrame()
+            if not top_u.empty:
+                fig_u = px.bar(top_u, x='pages', y='user_name', orientation='h',
+                               text='pages', color='pages', color_continuous_scale=['#D0E1FD', '#0078D4'])
+                fig_u.update_traces(
+                    hovertemplate="<b>👤 Usuário:</b> %{y}<br><b>📄 Páginas:</b> %{x}<extra></extra>",
+                    textposition='outside'
+                )
+                fig_u.update_layout(
+                    showlegend=False, 
+                    coloraxis_showscale=False,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(showgrid=False, visible=False),
+                    yaxis={'categoryorder':'total ascending', 'showgrid':False},
+                    margin=dict(t=10, b=10, l=10, r=40)
+                )
+                st.plotly_chart(fig_u, use_container_width=True, config={'displayModeBar': False})
+
+        with col_r2:
+            st.markdown("<div class='section-title'>🏢 Distribuição por Setor / Unidade</div>", unsafe_allow_html=True)
+            df_un = jobs_validos.groupby('filial')['pages'].sum().reset_index() if not jobs_validos.empty else pd.DataFrame()
+            if not df_un.empty:
+                fig_un = px.bar(df_un, x='filial', y='pages', text='pages',
+                                color_discrete_sequence=['#0078D4'])
+                fig_un.update_traces(
+                    hovertemplate="<b>🏢 Unidade:</b> %{x}<br><b>📄 Total:</b> %{y}<extra></extra>",
+                    textposition='outside'
+                )
+                fig_un.update_layout(
+                    showlegend=False,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(showgrid=False, title=""),
+                    yaxis=dict(showgrid=False, visible=False),
+                    margin=dict(t=10, b=10, l=10, r=10)
+                )
+                st.plotly_chart(fig_un, use_container_width=True, config={'displayModeBar': False})
+
+        # --- SEÇÃO 5: TABELA DE AUDITORIA ---
+        st.markdown("<br><div class='section-title'>🔍 Auditoria de Documentos e Diagnósticos</div>", unsafe_allow_html=True)
+        search = st.text_input("Filtrar registros por palavra-chave...")
+        
+        df_final = df[['created_at', 'filial', 'user_name', 'document_name', 'pages', 'printer_name', 'status_pt']].copy()
+        df_final.columns = ['Data/Hora', 'Unidade', 'Usuário', 'Documento', 'Págs', 'Impressora', 'Status']
+        
+        if search:
+            df_final = df_final[
+                df_final['Documento'].str.contains(search, case=False) | 
+                df_final['Usuário'].str.contains(search, case=False) |
+                df_final['Status'].str.contains(search, case=False)
+            ]
+
+        df_final = df_final.sort_values(by='Data/Hora', ascending=False)
+
+        def highlight_status(row):
+            styles = [''] * len(row)
+            status_val = row['Status']
+            if status_val in ['Falha Crítica', 'Cancelado pelo Usuário']:
+                return ['background-color: #FEE2E2; color: #991B1B; font-weight: 500;'] * len(row)
+            elif status_val in ['Toner Baixo', 'Spooler Sobrecarregado', 'Dispositivo Offline', 'Retido na Fila']:
+                return ['background-color: #FEF3C7; color: #92400E;'] * len(row)
+            return styles
+
+        st.dataframe(
+            df_final.style.apply(highlight_status, axis=1),
+            use_container_width=True, 
+            hide_index=True
+        )
+
+        csv = df_final.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.download_button("📥 Exportar Planilha Consolidada (Excel/CSV)", csv, "auditoria_impressao_ellca.csv", "text/csv")
+
+    else:
+        st.warning("Nenhum registro correspondente encontrado para a combinação de filtros selecionada.")
+
+    # LÓGICA DE REFRESH AUTOMÁTICO
+    if 'auto_refresh' in locals() and auto_refresh:
+        time.sleep(60)
+        st.rerun()
