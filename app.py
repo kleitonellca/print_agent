@@ -79,7 +79,7 @@ st.markdown("""
             margin: 0;
         }
         
-        /* Estilização do Container Nativo de Filtros (Garante que não fique vazio) */
+        /* Estilização do Container Nativo de Filtros */
         div[data-testid="stElementContainer"]:has(.filter-box) {
             margin-top: -5px !important;
         }
@@ -220,7 +220,6 @@ if check_password():
                 }
                 df['status_pt'] = df['status'].map(mapa_status).fillna(df['status'])
             
-            # Retornamos o DataFrame e a contagem real absoluta
             return df, total_real_logs
         except Exception as e:
             st.error(f"Erro ao buscar dados: {e}")
@@ -229,8 +228,17 @@ if check_password():
     # Desempacota o dataframe e o contador real global
     df_raw, total_global_logs = fetch_analytics()
 
-   
     if not df_raw.empty:
+        # =====================================================================
+        # CONTROLE DE DATAS E CONFIGURAÇÃO DE ESCOPO GLOBAL (BLINDAGEM DE ESCOPO)
+        # =====================================================================
+        hoje_local = pd.Timestamp.now(tz='America/Sao_Paulo').date()
+        
+        if 'Data' in df_raw.columns:
+            data_minima_banco = df_raw['Data'].min()
+        else:
+            data_minima_banco = hoje_local - pd.Timedelta(days=7)
+
         # --- HEADER CORPORATIVO SUPERIOR ---
         st.markdown("""
             <div class='corporate-header'>
@@ -245,21 +253,20 @@ if check_password():
             </div>
         """, unsafe_allow_html=True)
 
-        # --- FILTROS HORIZONTAIS ENVELOPADOS (Solução do Bug da Barra) ---
+        # --- FILTROS HORIZONTAIS ENVELOPADOS ---
         with st.container(border=True):
-            # Injeta uma classe identificadora para o CSS focar apenas neste bloco
             st.markdown('<div class="filter-box"></div>', unsafe_allow_html=True)
             f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.5, 1.5, 2, 2, 1])
             
             with f_col1:
-                d_inicio = st.date_input("De", value=pd.to_datetime("today") - pd.Timedelta(days=7), format="DD/MM/YYYY")
+                d_inicio = st.date_input("De", value=data_minima_banco, format="DD/MM/YYYY")
             with f_col2:
-                d_fim = st.date_input("Até", value=pd.to_datetime("today"), format="DD/MM/YYYY")
+                d_fim = st.date_input("Até", value=hoje_local, format="DD/MM/YYYY")
             with f_col3:
-                filiais = ["Todas"] + sorted(df_raw['filial'].unique().tolist())
+                filiais = ["Todas"] + sorted(df_raw['filial'].dropna().unique().tolist())
                 filial_sel = st.selectbox("Filial", filiais)
             with f_col4:
-                users = ["Todos"] + sorted(df_raw['user_name'].unique().tolist())
+                users = ["Todos"] + sorted(df_raw['user_name'].dropna().unique().tolist())
                 user_sel = st.selectbox("Usuário", users)
             with f_col5:
                 st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
@@ -279,7 +286,7 @@ if check_password():
             jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
             t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
             
-            # Se o filtro estiver exibindo tudo, usamos o total real do banco, senão usamos o count do filtro atual
+            # Verificação segura de filtros limpos para exibição da volumetria real global
             filtro_limpo = (filial_sel == "Todas" and user_sel == "Todos" and d_inicio == data_minima_banco and d_fim == hoje_local)
             exibir_total_logs = total_global_logs if filtro_limpo else len(df)
             
@@ -288,10 +295,7 @@ if check_password():
 
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Páginas (Sucesso)", f"{t_paginas:,}".replace(",", "."))
-            
-            # CARD CORRIGIDO: Exibe o número real do banco sem travar em 1000
             m2.metric("Total Logs Capturados", f"{exibir_total_logs:,}".replace(",", "."))
-            
             m3.metric("Média Págs / Doc", media_pag)
             m4.metric("Unidades Ativas", t_unidades)
 
@@ -469,7 +473,7 @@ if check_password():
     else:
         st.info("Aguardando sincronização de dados estruturados na nuvem...")
 
-  # LÓGICA DE REFRESH AUTOMÁTICO BLINDADA CONTRA NAMEERROR
+    # LÓGICA DE REFRESH AUTOMÁTICO BLINDADA CONTRA NAMEERROR
     if 'auto_refresh' in locals() and auto_refresh:
         time.sleep(60)
         st.rerun()
