@@ -181,14 +181,14 @@ if check_password():
             st.error(f"Erro ao carregar metadados dos filtros: {e}")
             return [], [], pd.Timestamp.now(tz='America/Sao_Paulo').date() - pd.Timedelta(days=7)
 
-    # --- 2. ENGINE DE DADOS COMPLETO COM BLINDAGEM DE COLUNA ---
+    # --- 2. ENGINE DE DADOS OTIMIZADO PARA EXPORTAÇÃO COMPLETA ---
     def fetch_dashboard_data(p_inicio, p_fim, f_sel, u_sel):
         try:
             iso_inicio = f"{p_inicio}T00:00:00.000000+00:00"
             iso_fim = f"{p_fim}T23:59:59.999999+00:00"
 
-            # Mudamos para select("*") para evitar erros fatais se colunas explícitas sumirem
-            q_macro = supabase.table("print_logs").select("*", count="exact")
+            # Query 1: Base de dados estatística e de Exportação (Traz todas as colunas necessárias de TODOS os registros do período)
+            q_macro = supabase.table("print_logs").select("created_at, filial, user_name, document_name, pages, printer_name, hostname", count="exact")
             q_macro = q_macro.gte("created_at", iso_inicio).lte("created_at", iso_fim)
             if f_sel != "Todas":
                 q_macro = q_macro.eq("filial", f_sel)
@@ -199,59 +199,14 @@ if check_password():
             total_logs = res_macro.count if res_macro.count is not None else 0
             df_macro = pd.DataFrame(res_macro.data)
 
-            mapa_status = {
-                'Documento enviado': 'Impressão Concluída',
-                'Documento pausado': 'Retido na Fila',
-                'Documento cancelado': 'Cancelado pelo Usuário',
-                'Erro de impressão': 'Falha Crítica',
-                'Fila congestionada': 'Spooler Sobrecarregado',
-                'Toner baixo': 'Toner Baixo',
-                'Offline': 'Dispositivo Offline'
-            }
-
-            # Garante consistência em nível de DataFrame se a coluna não existir fisicamente no banco
             if not df_macro.empty:
-                if 'status' not in df_macro.columns:
-                    df_macro['status'] = 'Documento enviado'
-                if 'printer_name' not in df_macro.columns:
-                    df_macro['printer_name'] = 'Padrão'
-                if 'pages' not in df_macro.columns:
-                    df_macro['pages'] = 0
-
                 df_macro['created_at'] = pd.to_datetime(df_macro['created_at'], utc=True).dt.tz_convert('America/Sao_Paulo')
                 df_macro['Data'] = df_macro['created_at'].dt.date
                 df_macro['Hora'] = df_macro['created_at'].dt.hour
-                df_macro['status'] = df_macro['status'].fillna('Documento enviado')
-                df_macro['status_pt'] = df_macro['status'].map(mapa_status).fillna(df_macro['status'])
+                df_macro['pages'] = pd.to_numeric(df_macro['pages'], errors='coerce').fillna(0).astype(int)
 
-            # Query da tabela de auditoria (Usa a mesma lógica defensiva)
-            q_audit = supabase.table("print_logs").select("*")
-            q_audit = q_audit.gte("created_at", iso_inicio).lte("created_at", iso_fim)
-            if f_sel != "Todas":
-                q_audit = q_audit.eq("filial", f_sel)
-            if u_sel != "Todos":
-                q_audit = q_audit.eq("user_name", u_sel)
-            
-            res_audit = q_audit.order("created_at", desc=True).limit(1000).execute()
-            df_audit = pd.DataFrame(res_audit.data)
-
-            if not df_audit.empty:
-                if 'status' not in df_audit.columns:
-                    df_audit['status'] = 'Documento enviado'
-                if 'document_name' not in df_audit.columns:
-                    df_audit['document_name'] = 'Desconhecido'
-                if 'printer_name' not in df_audit.columns:
-                    df_audit['printer_name'] = 'Padrão'
-                if 'pages' not in df_audit.columns:
-                    df_audit['pages'] = 0
-                if 'filial' not in df_audit.columns:
-                    df_audit['filial'] = 'Não informada'
-                if 'user_name' not in df_audit.columns:
-                    df_audit['user_name'] = 'Sistema'
-
-                df_audit['created_at'] = pd.to_datetime(df_audit['created_at'], utc=True).dt.tz_convert('America/Sao_Paulo')
-                df_audit['status'] = df_audit['status'].fillna('Documento enviado')
-                df_audit['status_pt'] = df_audit['status'].map(mapa_status).fillna(df_audit['status'])
+            # Query 2: Apenas uma visualização rápida limitada para a interface visual não travar
+            df_audit = df_macro.head(1000).copy() if not df_macro.empty else pd.DataFrame()
 
             return df_macro, df_audit, total_logs
         except Exception as e:
@@ -298,48 +253,29 @@ if check_password():
     df, df_tabela, exibir_total_logs = fetch_dashboard_data(d_inicio, d_fim, filial_sel, user_sel)
 
     if not df.empty:
-        # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA ---
-        jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
-        t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
-        media_pag = round(jobs_validos['pages'].mean(), 1) if not jobs_validos.empty else 0
-        
-        t_unidades = df['filial'].nunique() if 'filial' in df.columns else 0
+        # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA (BASE INTEGRAL DO PERÍODO) ---
+        t_paginas = int(df['pages'].sum())
+        media_pag = round(df['pages'].mean(), 1) if t_paginas > 0 else 0
+        t_unidades = df['filial'].nunique()
         
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Páginas (Sucesso)", f"{t_paginas:,}".replace(",", "."))
+        m1.metric("Total Páginas Impressas", f"{t_paginas:,}".replace(",", "."))
         m2.metric("Total Logs Capturados", f"{exibir_total_logs:,}".replace(",", "."))
-        m3.metric("Média Págs / Doc", media_pag)
-        m4.metric("Unidades Ativas", t_unidades)
+        m3.metric("Média Págs / Documento", media_pag)
+        m4.metric("Unidades Ativas no Período", t_unidades)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- SEÇÃO 2: ALERTA DO PARQUE ---
-        st.markdown("<div class='section-title'>Alertas e Integridade do Parque</div>", unsafe_allow_html=True)
-        col_t1, col_t2, col_t3 = st.columns(3)
-        
-        impressoras_offline = df[df['status'] == 'Offline']['printer_name'].nunique()
-        toner_baixo = df[df['status'] == 'Toner baixo']['printer_name'].nunique()
-        filas_travadas = df[df['status'] == 'Fila congestionada']['printer_name'].nunique()
-        
-        col_t1.metric("Impressoras Offline", impressoras_offline, 
-                    delta="Atenção" if impressoras_offline > 0 else "OK", delta_color="inverse")
-        col_t2.metric("Alertas de Toner Baixo", toner_baixo, 
-                    delta="Substituir" if toner_baixo > 0 else "OK", delta_color="inverse")
-        col_t3.metric("Filas Congestionadas", filas_travadas, 
-                    delta="Spooler Retido" if filas_travadas > 0 else "OK", delta_color="inverse")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # --- SEÇÃO 3: BLOCO DE GRÁFICOS INTERATIVOS ---
+        # --- SEÇÃO 2: BLOCO DE GRÁFICOS INTERATIVOS ---
         st.markdown("<div class='section-title'>Análise Gráfica Macroeconômica</div>", unsafe_allow_html=True)
         col_a, col_b = st.columns([2, 1])
 
         with col_a:
-            df_day = jobs_validos.groupby('Data')['pages'].sum().reset_index() if not jobs_validos.empty else pd.DataFrame(columns=['Data', 'pages'])
+            df_day = df.groupby('Data')['pages'].sum().reset_index()
             if not df_day.empty:
                 df_day['Data_Formato'] = df_day['Data'].apply(lambda x: x.strftime('%d/%m/%Y'))
                 fig_timeline = px.area(df_day, x='Data', y='pages', 
-                                       title="<b>Histórico de Consumo Efetivo (Páginas)</b>",
+                                       title="<b>Histórico de Volume de Impressão (Páginas)</b>",
                                        color_discrete_sequence=['#0078D4'])
                 
                 fig_timeline.update_traces(
@@ -362,28 +298,18 @@ if check_password():
                 st.info("Sem dados volumétricos suficientes para gerar a linha temporal.")
 
         with col_b:
-            df_status = df.groupby('status_pt').size().reset_index(name='Quantidade') if 'status_pt' in df.columns else pd.DataFrame()
-            if not df_status.empty:
-                color_map = {
-                    'Impressão Concluída': '#0078D4',
-                    'Retido na Fila': '#FFB900',
-                    'Cancelado pelo Usuário': '#D83B01',
-                    'Falha Crítica': '#E81123',
-                    'Spooler Sobrecarregado': '#A741A5',
-                    'Toner Baixo': '#F7630C',
-                    'Dispositivo Offline': '#7A7A7A'
-                }
+            df_print = df.groupby('printer_name')['pages'].sum().reset_index()
+            if not df_print.empty:
+                fig_print = px.pie(df_print, values='pages', names='printer_name', hole=0.60,
+                                   title="<b>Carga por Impressora (Páginas)</b>",
+                                   color_discrete_sequence=px.colors.qualitative.Prism)
                 
-                fig_status = px.pie(df_status, values='Quantidade', names='status_pt', hole=0.60,
-                                    color='status_pt', color_discrete_map=color_map)
-                
-                fig_status.update_traces(
+                fig_print.update_traces(
                     textinfo='none',
-                    hovertemplate="<b>📌 Status:</b> %{label}<br><b>📋 Ocorrências:</b> %{value}<br><b>📊 Porcentagem:</b> %{percent}<extra></extra>"
+                    hovertemplate="<b>🖨️ Impressora:</b> %{label}<br><b>📄 Páginas:</b> %{value}<br><b>📊 Proporção:</b> %{percent}<extra></extra>"
                 )
                 
-                fig_status.update_layout(
-                    title={"text": "<b>Ciclo de Vida / Erros</b>", "y": 0.95, "x": 0.0, "xanchor": 'left', "yanchor": 'top'},
+                fig_print.update_layout(
                     title_font=dict(size=14, color='#002040', family="Arial"),
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
@@ -397,16 +323,16 @@ if check_password():
                         font=dict(size=10, color="#4B5563")
                     )
                 )
-                st.plotly_chart(fig_status, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_print, use_container_width=True, config={'displayModeBar': False})
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- SEÇÃO 4: RANKINGS ---
+        # --- SEÇÃO 3: RANKINGS ---
         col_r1, col_r2 = st.columns(2)
 
         with col_r1:
-            st.markdown("<div class='section-title'>👤 Top 5 Usuários (Consumo Efetivo)</div>", unsafe_allow_html=True)
-            top_u = jobs_validos.groupby('user_name')['pages'].sum().nlargest(5).reset_index() if not jobs_validos.empty and 'user_name' in jobs_validos.columns else pd.DataFrame()
+            st.markdown("<div class='section-title'>👤 Top 5 Usuários de Maior Impacto</div>", unsafe_allow_html=True)
+            top_u = df.groupby('user_name')['pages'].sum().nlargest(5).reset_index()
             if not top_u.empty:
                 fig_u = px.bar(top_u, x='pages', y='user_name', orientation='h',
                                text='pages', color='pages', color_continuous_scale=['#D0E1FD', '#0078D4'])
@@ -426,13 +352,13 @@ if check_password():
                 st.plotly_chart(fig_u, use_container_width=True, config={'displayModeBar': False})
 
         with col_r2:
-            st.markdown("<div class='section-title'>🏢 Distribuição por Setor / Unidade</div>", unsafe_allow_html=True)
-            df_un = jobs_validos.groupby('filial')['pages'].sum().reset_index() if not jobs_validos.empty and 'filial' in jobs_validos.columns else pd.DataFrame()
+            st.markdown("<div class='section-title'>🏢 Distribuição de Volumetria por Unidade</div>", unsafe_allow_html=True)
+            df_un = df.groupby('filial')['pages'].sum().reset_index()
             if not df_un.empty:
                 fig_un = px.bar(df_un, x='filial', y='pages', text='pages',
                                 color_discrete_sequence=['#0078D4'])
                 fig_un.update_traces(
-                    hovertemplate="<b>🏢 Unidade:</b> %{x}<br><b>📄 Total:</b> %{y}<extra></extra>",
+                    hovertemplate="<b>🏢 Unidade:</b> %{x}<br><b>📄 Total Páginas:</b> %{y}<extra></extra>",
                     textposition='outside'
                 )
                 fig_un.update_layout(
@@ -445,46 +371,43 @@ if check_password():
                 )
                 st.plotly_chart(fig_un, use_container_width=True, config={'displayModeBar': False})
 
-        # --- SEÇÃO 5: TABELA DE AUDITORIA ---
-        st.markdown("<br><div class='section-title'>🔍 Auditoria de Documentos e Diagnósticos</div>", unsafe_allow_html=True)
-        search = st.text_input("Filtrar registros por palavra-chave...")
+        # --- SEÇÃO 4: TABELA DE AUDITORIA (RENDERIZA MÁXIMO 1000 LINHAS PARA EVITAR LENTIDÃO NA TELA) ---
+        st.markdown("<br><div class='section-title'>🔍 Painel de Auditoria e Rastreamento de Filas (Amostragem Recente)</div>", unsafe_allow_html=True)
+        search = st.text_input("Filtrar registros visíveis na tela por palavra-chave...")
         
         if not df_tabela.empty:
-            df_final = df_tabela[['created_at', 'filial', 'user_name', 'document_name', 'pages', 'printer_name', 'status_pt']].copy()
-            df_final.columns = ['Data/Hora', 'Unidade', 'Usuário', 'Documento', 'Págs', 'Impressora', 'Status']
-            
-            df_final['Data/Hora'] = df_final['Data/Hora'].dt.tz_localize(None)
+            df_final_tela = df_tabela[['created_at', 'filial', 'user_name', 'document_name', 'pages', 'printer_name', 'hostname']].copy()
+            df_final_tela.columns = ['Data/Hora', 'Unidade', 'Usuário', 'Nome do Documento', 'Págs', 'Impressora', 'Estação (Host)']
+            df_final_tela['Data/Hora'] = df_final_tela['Data/Hora'].dt.tz_localize(None)
             
             if search:
-                df_final = df_final[
-                    df_final['Documento'].str.contains(search, case=False) | 
-                    df_final['Usuário'].str.contains(search, case=False) |
-                    df_final['Status'].str.contains(search, case=False)
+                df_final_tela = df_final_tela[
+                    df_final_tela['Nome do Documento'].str.contains(search, case=False) | 
+                    df_final_tela['Usuário'].str.contains(search, case=False) |
+                    df_final_tela['Unidade'].str.contains(search, case=False)
                 ]
 
-            df_final = df_final.sort_values(by='Data/Hora', ascending=False)
+            df_final_tela = df_final_tela.sort_values(by='Data/Hora', ascending=False)
+            st.dataframe(df_final_tela, use_container_width=True, hide_index=True)
 
-            def highlight_status(row):
-                styles = [''] * len(row)
-                status_val = row['Status']
-                if status_val in ['Falha Crítica', 'Cancelado pelo Usuário']:
-                    return ['background-color: #FEE2E2; color: #991B1B; font-weight: 500;'] * len(row)
-                elif status_val in ['Toner Baixo', 'Spooler Sobrecarregado', 'Dispositivo Offline', 'Retido na Fila']:
-                    return ['background-color: #FEF3C7; color: #92400E;'] * len(row)
-                return styles
-
-            st.dataframe(
-                df_final.style.apply(highlight_status, axis=1),
-                use_container_width=True, 
-                hide_index=True
-            )
-
-            csv = df_final.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+        # --- SEÇÃO 5: MOTOR DE EXPORTAÇÃO COMPLETA (GERA O ARQUIVO USANDO A BASE TOTAL 'df' SEM LIMITES) ---
+        if not df.empty:
+            df_exportacao = df[['created_at', 'filial', 'user_name', 'document_name', 'pages', 'printer_name', 'hostname']].copy()
+            df_exportacao.columns = ['Data/Hora', 'Unidade', 'Usuário', 'Nome do Documento', 'Págs', 'Impressora', 'Estação (Host)']
+            df_exportacao['Data/Hora'] = df_exportacao['Data/Hora'].dt.tz_localize(None)
+            df_exportacao = df_exportacao.sort_values(by='Data/Hora', ascending=False)
+            
+            csv = df_exportacao.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
             st.markdown("<br>", unsafe_allow_html=True)
-            st.download_button("📥 Exportar Planilha Consolidada (Excel/CSV)", csv, "auditoria_impressao_ellca.csv", "text/csv")
-        else:
-            st.info("Nenhum registro detalhado pendente na amostragem.")
-
+            
+            # O label do botão agora mostra dinamicamente a quantidade total real de registros que serão baixados
+            st.download_button(
+                label=f"📥 Exportar Relatório Consolidado Total ({len(df_exportacao):,} registros)".replace(",", "."),
+                data=csv,
+                file_name="relatorio_consolidado_ellca.csv",
+                mime="text/csv"
+            )
+            
     else:
         st.warning("Nenhum registro correspondente encontrado para a combinação de filtros selecionada.")
 
