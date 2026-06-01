@@ -181,14 +181,14 @@ if check_password():
             st.error(f"Erro ao carregar metadados dos filtros: {e}")
             return [], [], pd.Timestamp.now(tz='America/Sao_Paulo').date() - pd.Timedelta(days=7)
 
-    # --- 2. ENGINE DE DADOS COMPLETO (MÉTRICAS E GRÁFICOS SEM LIMITES) ---
+    # --- 2. ENGINE DE DADOS COMPLETO COM BLINDAGEM DE COLUNA ---
     def fetch_dashboard_data(p_inicio, p_fim, f_sel, u_sel):
         try:
             iso_inicio = f"{p_inicio}T00:00:00.000000+00:00"
             iso_fim = f"{p_fim}T23:59:59.999999+00:00"
 
-            # Query 1: Estatísticas Macro (Traz TODAS as linhas do período para consistência real dos gráficos)
-            q_macro = supabase.table("print_logs").select("created_at, filial, user_name, pages, status, printer_name", count="exact")
+            # Mudamos para select("*") para evitar erros fatais se colunas explícitas sumirem
+            q_macro = supabase.table("print_logs").select("*", count="exact")
             q_macro = q_macro.gte("created_at", iso_inicio).lte("created_at", iso_fim)
             if f_sel != "Todas":
                 q_macro = q_macro.eq("filial", f_sel)
@@ -199,7 +199,6 @@ if check_password():
             total_logs = res_macro.count if res_macro.count is not None else 0
             df_macro = pd.DataFrame(res_macro.data)
 
-            # Tratamento de fuso horário e mappings idênticos
             mapa_status = {
                 'Documento enviado': 'Impressão Concluída',
                 'Documento pausado': 'Retido na Fila',
@@ -210,15 +209,23 @@ if check_password():
                 'Offline': 'Dispositivo Offline'
             }
 
+            # Garante consistência em nível de DataFrame se a coluna não existir fisicamente no banco
             if not df_macro.empty:
+                if 'status' not in df_macro.columns:
+                    df_macro['status'] = 'Documento enviado'
+                if 'printer_name' not in df_macro.columns:
+                    df_macro['printer_name'] = 'Padrão'
+                if 'pages' not in df_macro.columns:
+                    df_macro['pages'] = 0
+
                 df_macro['created_at'] = pd.to_datetime(df_macro['created_at'], utc=True).dt.tz_convert('America/Sao_Paulo')
                 df_macro['Data'] = df_macro['created_at'].dt.date
                 df_macro['Hora'] = df_macro['created_at'].dt.hour
                 df_macro['status'] = df_macro['status'].fillna('Documento enviado')
                 df_macro['status_pt'] = df_macro['status'].map(mapa_status).fillna(df_macro['status'])
 
-            # Query 2: Amostragem da Tabela de Auditoria (Limitada a 1000 por performance)
-            q_audit = supabase.table("print_logs").select("created_at, filial, user_name, document_name, pages, printer_name, status")
+            # Query da tabela de auditoria (Usa a mesma lógica defensiva)
+            q_audit = supabase.table("print_logs").select("*")
             q_audit = q_audit.gte("created_at", iso_inicio).lte("created_at", iso_fim)
             if f_sel != "Todas":
                 q_audit = q_audit.eq("filial", f_sel)
@@ -229,6 +236,19 @@ if check_password():
             df_audit = pd.DataFrame(res_audit.data)
 
             if not df_audit.empty:
+                if 'status' not in df_audit.columns:
+                    df_audit['status'] = 'Documento enviado'
+                if 'document_name' not in df_audit.columns:
+                    df_audit['document_name'] = 'Desconhecido'
+                if 'printer_name' not in df_audit.columns:
+                    df_audit['printer_name'] = 'Padrão'
+                if 'pages' not in df_audit.columns:
+                    df_audit['pages'] = 0
+                if 'filial' not in df_audit.columns:
+                    df_audit['filial'] = 'Não informada'
+                if 'user_name' not in df_audit.columns:
+                    df_audit['user_name'] = 'Sistema'
+
                 df_audit['created_at'] = pd.to_datetime(df_audit['created_at'], utc=True).dt.tz_convert('America/Sao_Paulo')
                 df_audit['status'] = df_audit['status'].fillna('Documento enviado')
                 df_audit['status_pt'] = df_audit['status'].map(mapa_status).fillna(df_audit['status'])
@@ -278,13 +298,12 @@ if check_password():
     df, df_tabela, exibir_total_logs = fetch_dashboard_data(d_inicio, d_fim, filial_sel, user_sel)
 
     if not df.empty:
-        # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA (BASE MACRO COMPLETA) ---
+        # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA ---
         jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
         t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
         media_pag = round(jobs_validos['pages'].mean(), 1) if not jobs_validos.empty else 0
         
-        # Correção aqui: calculamos as unidades ativas olhando para todo o período
-        t_unidades = df['filial'].nunique()
+        t_unidades = df['filial'].nunique() if 'filial' in df.columns else 0
         
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Páginas (Sucesso)", f"{t_paginas:,}".replace(",", "."))
@@ -343,7 +362,7 @@ if check_password():
                 st.info("Sem dados volumétricos suficientes para gerar a linha temporal.")
 
         with col_b:
-            df_status = df.groupby('status_pt').size().reset_index(name='Quantidade')
+            df_status = df.groupby('status_pt').size().reset_index(name='Quantidade') if 'status_pt' in df.columns else pd.DataFrame()
             if not df_status.empty:
                 color_map = {
                     'Impressão Concluída': '#0078D4',
@@ -387,7 +406,7 @@ if check_password():
 
         with col_r1:
             st.markdown("<div class='section-title'>👤 Top 5 Usuários (Consumo Efetivo)</div>", unsafe_allow_html=True)
-            top_u = jobs_validos.groupby('user_name')['pages'].sum().nlargest(5).reset_index() if not jobs_validos.empty else pd.DataFrame()
+            top_u = jobs_validos.groupby('user_name')['pages'].sum().nlargest(5).reset_index() if not jobs_validos.empty and 'user_name' in jobs_validos.columns else pd.DataFrame()
             if not top_u.empty:
                 fig_u = px.bar(top_u, x='pages', y='user_name', orientation='h',
                                text='pages', color='pages', color_continuous_scale=['#D0E1FD', '#0078D4'])
@@ -408,7 +427,7 @@ if check_password():
 
         with col_r2:
             st.markdown("<div class='section-title'>🏢 Distribuição por Setor / Unidade</div>", unsafe_allow_html=True)
-            df_un = jobs_validos.groupby('filial')['pages'].sum().reset_index() if not jobs_validos.empty else pd.DataFrame()
+            df_un = jobs_validos.groupby('filial')['pages'].sum().reset_index() if not jobs_validos.empty and 'filial' in jobs_validos.columns else pd.DataFrame()
             if not df_un.empty:
                 fig_un = px.bar(df_un, x='filial', y='pages', text='pages',
                                 color_discrete_sequence=['#0078D4'])
@@ -426,7 +445,7 @@ if check_password():
                 )
                 st.plotly_chart(fig_un, use_container_width=True, config={'displayModeBar': False})
 
-        # --- SEÇÃO 5: TABELA DE AUDITORIA (RODA SOBRE O DATA FRAME DE AUDITORIA SEPARADO) ---
+        # --- SEÇÃO 5: TABELA DE AUDITORIA ---
         st.markdown("<br><div class='section-title'>🔍 Auditoria de Documentos e Diagnósticos</div>", unsafe_allow_html=True)
         search = st.text_input("Filtrar registros por palavra-chave...")
         
@@ -434,7 +453,6 @@ if check_password():
             df_final = df_tabela[['created_at', 'filial', 'user_name', 'document_name', 'pages', 'printer_name', 'status_pt']].copy()
             df_final.columns = ['Data/Hora', 'Unidade', 'Usuário', 'Documento', 'Págs', 'Impressora', 'Status']
             
-            # Removemos a informação de fuso para exibição limpa na tabela
             df_final['Data/Hora'] = df_final['Data/Hora'].dt.tz_localize(None)
             
             if search:
