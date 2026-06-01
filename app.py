@@ -24,14 +24,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- ESTILIZAÇÃO CUSTOMIZADA EVOLUÍDA (Filtros Blindados e Efeito Hover Neon) ---
+# --- ESTILIZAÇÃO CUSTOMIZADA EVOLUÍDA ---
 st.markdown("""
     <style>
-        /* Ajustes de tela e reset de espaços no topo */
         .stApp {
             background-color: #F3F4F6 !important;
         }
-        
         .block-container {
             padding-top: 0rem !important;
             padding-bottom: 2rem !important;
@@ -39,14 +37,11 @@ st.markdown("""
             padding-right: 3rem !important;
             margin-top: 0rem !important;
         }
-        
         header[data-testid="stHeader"] {
             background-color: rgba(0,0,0,0) !important;
             z-index: -1 !important;
             display: none !important;
         }
-        
-        /* Header Superior - Azul Marinho Corporativo */
         .corporate-header {
             background-color: #002040;
             padding: 18px 30px;
@@ -78,37 +73,27 @@ st.markdown("""
             font-weight: 300;
             margin: 0;
         }
-        
-        /* Estilização do Container Nativo de Filtros */
         div[data-testid="stElementContainer"]:has(.filter-box) {
             margin-top: -5px !important;
         }
         .filter-box div[data-testid="stSubheader"] {
             display: none !important;
         }
-        
-        /* Input do Streamlit Customizado com Contorno Forte Azul Marinho */
         div[data-baseweb="select"], div[data-baseweb="input"], div[data-baseweb="calendar"] {
             border: 1.5px solid #002040 !important;
             border-radius: 6px !important;
             transition: all 0.2s ease-in-out !important;
             background-color: #FFFFFF !important;
         }
-        
-        /* Foco ativo com efeito Glow */
         div[data-baseweb="select"]:focus-within, div[data-baseweb="input"]:focus-within {
             border-color: #0078D4 !important;
             box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.25) !important;
         }
-        
-        /* Forçar labels dos filtros em Azul Escuro Negrito */
         label p {
             color: #002040 !important;
             font-weight: 700 !important;
             font-size: 14px !important;
         }
-        
-        /* Cards de Métricas com Animação e Brilho Neon no Hover */
         div[data-testid="stMetric"] {
             background-color: #FFFFFF !important;
             border: 1px solid #E5E7EB !important;
@@ -117,15 +102,12 @@ st.markdown("""
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04) !important;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
-        
-        /* Efeito Hover Neon em Azul Escuro/Azul Principal */
         div[data-testid="stMetric"]:hover {
             transform: translateY(-4px) !important;
             border-color: #0078D4 !important;
             box-shadow: 0 0 20px rgba(0, 32, 64, 0.2), 
                         0 0 15px rgba(0, 120, 212, 0.45) !important;
         }
-        
         div[data-testid="stMetric"] label {
             color: #4B5563 !important;
             font-size: 13px !important;
@@ -138,8 +120,6 @@ st.markdown("""
             font-size: 28px !important;
             font-weight: 700 !important;
         }
-        
-        /* Títulos das Seções */
         .section-title {
             color: #002040;
             font-size: 15px;
@@ -175,25 +155,21 @@ def check_password():
     return False
 
 if check_password():
-    # CONEXÃO SUPABASE
     CLEAN_URL = SUPABASE_URL.split("/rest/v1/")[0]
     supabase = create_client(CLEAN_URL, SUPABASE_KEY)
 
-    # --- 1. BUSCA DE METADADOS DOS DROPDOWNS (SEMPRE TRAZ TUDO) ---
+    # --- 1. BUSCA DE METADADOS DOS DROPDOWNS (GLOBAL) ---
     @st.cache_data(ttl=30)
     def fetch_filters_metadata():
         try:
-            # Lista todas as filiais distintas no banco
             filiais_res = supabase.table("print_logs").select("filial").execute()
             df_f = pd.DataFrame(filiais_res.data)
             lista_filiais = sorted(df_f['filial'].dropna().unique().tolist()) if not df_f.empty else []
 
-            # Lista todos os usuários distintos no banco
             users_res = supabase.table("print_logs").select("user_name").execute()
             df_u = pd.DataFrame(users_res.data)
             lista_users = sorted(df_u['user_name'].dropna().unique().tolist()) if not df_u.empty else []
 
-            # Captura a data do primeiro log histórico do banco
             dates_res = supabase.table("print_logs").select("created_at").order("created_at", desc=False).limit(1).execute()
             if dates_res.data:
                 data_minima = pd.to_datetime(dates_res.data[0]['created_at']).tz_convert('America/Sao_Paulo').date()
@@ -205,58 +181,63 @@ if check_password():
             st.error(f"Erro ao carregar metadados dos filtros: {e}")
             return [], [], pd.Timestamp.now(tz='America/Sao_Paulo').date() - pd.Timedelta(days=7)
 
-    # --- 2. CONSULTA DINÂMICA FILTRADA DIRETO NO SUPABASE ---
-    def fetch_filtered_data(p_inicio, p_fim, f_sel, u_sel):
+    # --- 2. ENGINE DE DADOS COMPLETO (MÉTRICAS E GRÁFICOS SEM LIMITES) ---
+    def fetch_dashboard_data(p_inicio, p_fim, f_sel, u_sel):
         try:
-            # Inicia a query base
-            query = supabase.table("print_logs").select("*", count="exact")
-            
-            # Converte as datas locais para o formato de string ISO esperado pelo banco timestampz
             iso_inicio = f"{p_inicio}T00:00:00.000000+00:00"
             iso_fim = f"{p_fim}T23:59:59.999999+00:00"
-            
-            query = query.gte("created_at", iso_inicio).lte("created_at", iso_fim)
-            
-            # Aplica filtros condicionais direto na query do Supabase
-            if f_sel != "Todas":
-                query = query.eq("filial", f_sel)
-            if u_sel != "Todos":
-                query = query.eq("user_name", u_sel)
-                
-            # Ordena e limita o retorno de linhas
-            res = query.order("created_at", desc=True).limit(1000).execute()
-            
-            total_linhas_filtradas = res.count if res.count is not None else 0
-            df = pd.DataFrame(res.data)
-            
-            if not df.empty:
-                df['created_at'] = pd.to_datetime(df['created_at'], utc=True)
-                df['created_at'] = df['created_at'].dt.tz_convert('America/Sao_Paulo')
-                df['Data'] = df['created_at'].dt.date
-                df['Hora'] = df['created_at'].dt.hour
-                df['created_at'] = df['created_at'].dt.tz_localize(None)
-                
-                if 'status' not in df.columns:
-                    df['status'] = 'Documento enviado'
-                df['status'] = df['status'].fillna('Documento enviado')
-                
-                mapa_status = {
-                    'Documento enviado': 'Impressão Concluída',
-                    'Documento pausado': 'Retido na Fila',
-                    'Documento cancelado': 'Cancelado pelo Usuário',
-                    'Erro de impressão': 'Falha Crítica',
-                    'Fila congestionada': 'Spooler Sobrecarregado',
-                    'Toner baixo': 'Toner Baixo',
-                    'Offline': 'Dispositivo Offline'
-                }
-                df['status_pt'] = df['status'].map(mapa_status).fillna(df['status'])
-                
-            return df, total_linhas_filtradas
-        except Exception as e:
-            st.error(f"Erro na execução da consulta filtrada: {e}")
-            return pd.DataFrame(), 0
 
-    # Carrega as opções dos dropdowns de forma global
+            # Query 1: Estatísticas Macro (Traz TODAS as linhas do período para consistência real dos gráficos)
+            q_macro = supabase.table("print_logs").select("created_at, filial, user_name, pages, status, printer_name", count="exact")
+            q_macro = q_macro.gte("created_at", iso_inicio).lte("created_at", iso_fim)
+            if f_sel != "Todas":
+                q_macro = q_macro.eq("filial", f_sel)
+            if u_sel != "Todos":
+                q_macro = q_macro.eq("user_name", u_sel)
+            
+            res_macro = q_macro.execute()
+            total_logs = res_macro.count if res_macro.count is not None else 0
+            df_macro = pd.DataFrame(res_macro.data)
+
+            # Tratamento de fuso horário e mappings idênticos
+            mapa_status = {
+                'Documento enviado': 'Impressão Concluída',
+                'Documento pausado': 'Retido na Fila',
+                'Documento cancelado': 'Cancelado pelo Usuário',
+                'Erro de impressão': 'Falha Crítica',
+                'Fila congestionada': 'Spooler Sobrecarregado',
+                'Toner baixo': 'Toner Baixo',
+                'Offline': 'Dispositivo Offline'
+            }
+
+            if not df_macro.empty:
+                df_macro['created_at'] = pd.to_datetime(df_macro['created_at'], utc=True).dt.tz_convert('America/Sao_Paulo')
+                df_macro['Data'] = df_macro['created_at'].dt.date
+                df_macro['Hora'] = df_macro['created_at'].dt.hour
+                df_macro['status'] = df_macro['status'].fillna('Documento enviado')
+                df_macro['status_pt'] = df_macro['status'].map(mapa_status).fillna(df_macro['status'])
+
+            # Query 2: Amostragem da Tabela de Auditoria (Limitada a 1000 por performance)
+            q_audit = supabase.table("print_logs").select("created_at, filial, user_name, document_name, pages, printer_name, status")
+            q_audit = q_audit.gte("created_at", iso_inicio).lte("created_at", iso_fim)
+            if f_sel != "Todas":
+                q_audit = q_audit.eq("filial", f_sel)
+            if u_sel != "Todos":
+                q_audit = q_audit.eq("user_name", u_sel)
+            
+            res_audit = q_audit.order("created_at", desc=True).limit(1000).execute()
+            df_audit = pd.DataFrame(res_audit.data)
+
+            if not df_audit.empty:
+                df_audit['created_at'] = pd.to_datetime(df_audit['created_at'], utc=True).dt.tz_convert('America/Sao_Paulo')
+                df_audit['status'] = df_audit['status'].fillna('Documento enviado')
+                df_audit['status_pt'] = df_audit['status'].map(mapa_status).fillna(df_audit['status'])
+
+            return df_macro, df_audit, total_logs
+        except Exception as e:
+            st.error(f"Erro no processamento lógico de dados: {e}")
+            return pd.DataFrame(), pd.DataFrame(), 0
+
     lista_todas_filiais, lista_todos_usuarios, data_minima_banco = fetch_filters_metadata()
     hoje_local = pd.Timestamp.now(tz='America/Sao_Paulo').date()
 
@@ -293,14 +274,16 @@ if check_password():
             st.markdown("<label style='font-size:14px; font-weight:700; color:#002040;'>Configurações</label>", unsafe_allow_html=True)
             auto_refresh = st.checkbox("🔄 Auto-Refresh", value=True)
 
-    # --- EXECUÇÃO DA FILTRAGEM ---
-    df, exibir_total_logs = fetch_filtered_data(d_inicio, d_fim, filial_sel, user_sel)
+    # --- CAPTURA E RECONCILIAÇÃO ---
+    df, df_tabela, exibir_total_logs = fetch_dashboard_data(d_inicio, d_fim, filial_sel, user_sel)
 
     if not df.empty:
-        # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA ---
+        # --- SEÇÃO 1: MÉTRICAS DE VOLUMETRIA (BASE MACRO COMPLETA) ---
         jobs_validos = df[~df['status'].isin(['Documento cancelado', 'Erro de impressão'])]
         t_paginas = int(jobs_validos['pages'].sum()) if not jobs_validos.empty else 0
         media_pag = round(jobs_validos['pages'].mean(), 1) if not jobs_validos.empty else 0
+        
+        # Correção aqui: calculamos as unidades ativas olhando para todo o período
         t_unidades = df['filial'].nunique()
         
         m1, m2, m3, m4 = st.columns(4)
@@ -315,9 +298,9 @@ if check_password():
         st.markdown("<div class='section-title'>Alertas e Integridade do Parque</div>", unsafe_allow_html=True)
         col_t1, col_t2, col_t3 = st.columns(3)
         
-        impressoras_offline = df[df['status'] == 'Offline']['printer_name'].nunique() if 'status' in df.columns else 0
-        toner_baixo = df[df['status'] == 'Toner baixo']['printer_name'].nunique() if 'status' in df.columns else 0
-        filas_travadas = df[df['status'] == 'Fila congestionada']['printer_name'].nunique() if 'status' in df.columns else 0
+        impressoras_offline = df[df['status'] == 'Offline']['printer_name'].nunique()
+        toner_baixo = df[df['status'] == 'Toner baixo']['printer_name'].nunique()
+        filas_travadas = df[df['status'] == 'Fila congestionada']['printer_name'].nunique()
         
         col_t1.metric("Impressoras Offline", impressoras_offline, 
                     delta="Atenção" if impressoras_offline > 0 else "OK", delta_color="inverse")
@@ -360,7 +343,7 @@ if check_password():
                 st.info("Sem dados volumétricos suficientes para gerar a linha temporal.")
 
         with col_b:
-            df_status = df.groupby('status_pt').size().reset_index(name='Quantidade') if 'status_pt' in df.columns else pd.DataFrame()
+            df_status = df.groupby('status_pt').size().reset_index(name='Quantidade')
             if not df_status.empty:
                 color_map = {
                     'Impressão Concluída': '#0078D4',
@@ -443,40 +426,46 @@ if check_password():
                 )
                 st.plotly_chart(fig_un, use_container_width=True, config={'displayModeBar': False})
 
-        # --- SEÇÃO 5: TABELA DE AUDITORIA ---
+        # --- SEÇÃO 5: TABELA DE AUDITORIA (RODA SOBRE O DATA FRAME DE AUDITORIA SEPARADO) ---
         st.markdown("<br><div class='section-title'>🔍 Auditoria de Documentos e Diagnósticos</div>", unsafe_allow_html=True)
         search = st.text_input("Filtrar registros por palavra-chave...")
         
-        df_final = df[['created_at', 'filial', 'user_name', 'document_name', 'pages', 'printer_name', 'status_pt']].copy()
-        df_final.columns = ['Data/Hora', 'Unidade', 'Usuário', 'Documento', 'Págs', 'Impressora', 'Status']
-        
-        if search:
-            df_final = df_final[
-                df_final['Documento'].str.contains(search, case=False) | 
-                df_final['Usuário'].str.contains(search, case=False) |
-                df_final['Status'].str.contains(search, case=False)
-            ]
+        if not df_tabela.empty:
+            df_final = df_tabela[['created_at', 'filial', 'user_name', 'document_name', 'pages', 'printer_name', 'status_pt']].copy()
+            df_final.columns = ['Data/Hora', 'Unidade', 'Usuário', 'Documento', 'Págs', 'Impressora', 'Status']
+            
+            # Removemos a informação de fuso para exibição limpa na tabela
+            df_final['Data/Hora'] = df_final['Data/Hora'].dt.tz_localize(None)
+            
+            if search:
+                df_final = df_final[
+                    df_final['Documento'].str.contains(search, case=False) | 
+                    df_final['Usuário'].str.contains(search, case=False) |
+                    df_final['Status'].str.contains(search, case=False)
+                ]
 
-        df_final = df_final.sort_values(by='Data/Hora', ascending=False)
+            df_final = df_final.sort_values(by='Data/Hora', ascending=False)
 
-        def highlight_status(row):
-            styles = [''] * len(row)
-            status_val = row['Status']
-            if status_val in ['Falha Crítica', 'Cancelado pelo Usuário']:
-                return ['background-color: #FEE2E2; color: #991B1B; font-weight: 500;'] * len(row)
-            elif status_val in ['Toner Baixo', 'Spooler Sobrecarregado', 'Dispositivo Offline', 'Retido na Fila']:
-                return ['background-color: #FEF3C7; color: #92400E;'] * len(row)
-            return styles
+            def highlight_status(row):
+                styles = [''] * len(row)
+                status_val = row['Status']
+                if status_val in ['Falha Crítica', 'Cancelado pelo Usuário']:
+                    return ['background-color: #FEE2E2; color: #991B1B; font-weight: 500;'] * len(row)
+                elif status_val in ['Toner Baixo', 'Spooler Sobrecarregado', 'Dispositivo Offline', 'Retido na Fila']:
+                    return ['background-color: #FEF3C7; color: #92400E;'] * len(row)
+                return styles
 
-        st.dataframe(
-            df_final.style.apply(highlight_status, axis=1),
-            use_container_width=True, 
-            hide_index=True
-        )
+            st.dataframe(
+                df_final.style.apply(highlight_status, axis=1),
+                use_container_width=True, 
+                hide_index=True
+            )
 
-        csv = df_final.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.download_button("📥 Exportar Planilha Consolidada (Excel/CSV)", csv, "auditoria_impressao_ellca.csv", "text/csv")
+            csv = df_final.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.download_button("📥 Exportar Planilha Consolidada (Excel/CSV)", csv, "auditoria_impressao_ellca.csv", "text/csv")
+        else:
+            st.info("Nenhum registro detalhado pendente na amostragem.")
 
     else:
         st.warning("Nenhum registro correspondente encontrado para a combinação de filtros selecionada.")
